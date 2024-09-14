@@ -13,15 +13,16 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@instantdb/core": "^0.12.8",
-    "@tauri-apps/api": "^1"
+    "@instantdb/core": "^0.12.37",
+    "@tauri-apps/api": "2.0.0-rc.4",
+    "@tauri-apps/plugin-shell": "^2.0.0-rc"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.1",
     "@sveltejs/kit": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^3.0.0",
     "@tailwindcss/typography": "^0.5.14",
-    "@tauri-apps/cli": "^1",
+    "@tauri-apps/cli": "2.0.0-rc.13",
     "autoprefixer": "^10.4.20",
     "svelte": "^5.0.0-next.1",
     "svelte-check": "^3.6.0",
