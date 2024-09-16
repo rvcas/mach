@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { type Todo, addTodo, db } from '$lib/instant';
+  import { Todo, db } from '$lib/instant';
   import { invoke } from '@tauri-apps/api/core';
 
   let name = $state('');
   let greetMsg = $state('');
-  let todos: ({ id: string } & Todo)[] = $state([]);
+  let todos: { id: string }[] = $state([]);
 
   db.subscribeQuery({ todos: {} }, (resp) => {
     if (resp.error) {
@@ -22,7 +22,7 @@
     // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
     greetMsg = await invoke('greet', { name });
 
-    addTodo(name);
+    Todo.create(name);
   }
 </script>
 
@@ -53,7 +53,6 @@
   {#each todos as todo (todo.id)}
     <div>
       <p>{todo.id}</p>
-      <p>{todo.text}</p>
     </div>
   {/each}
 </div>
