@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
-  import { addTodo, db, type Todo } from "$lib/instant";
+  import { type Todo, addTodo, db } from '$lib/instant';
+  import { invoke } from '@tauri-apps/api/core';
 
-  let name = $state("");
-  let greetMsg = $state("");
+  let name = $state('');
+  let greetMsg = $state('');
   let todos: ({ id: string } & Todo)[] = $state([]);
 
   db.subscribeQuery({ todos: {} }, (resp) => {
@@ -20,7 +20,7 @@
     e.preventDefault();
 
     // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-    greetMsg = await invoke("greet", { name });
+    greetMsg = await invoke('greet', { name });
 
     addTodo(name);
   }
