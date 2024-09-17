@@ -65,8 +65,9 @@ export default {
     allow: {
       view: 'isMember',
       create: 'isMember && isCreator',
-      delete: 'isMember && !isDefault',
-      update: 'isMember',
+      delete: 'isCreator && !isDefault',
+      update:
+        'isMember && data.creatorId == newData.creatorId && data.isDefault == newData.isDefault',
     },
   },
 };
