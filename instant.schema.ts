@@ -8,8 +8,18 @@ const graph = i.graph(
     todos: i.entity({
       text: i.string(),
       done: i.boolean(),
-      createdAt: i.number(),
+      date: i.number().optional(),
+      listId: i.string().optional(),
+      groupId: i.string().optional(),
       assigneeId: i.string().optional(),
+    }),
+    lists: i.entity({
+      name: i.string(),
+    }),
+    groups: i.entity({
+      name: i.string(),
+      date: i.number().optional(),
+      listId: i.string().optional(),
     }),
     drawings: i.entity({
       name: i.string(),
@@ -46,16 +56,43 @@ const graph = i.graph(
         label: 'todos',
       },
     },
-    todosAssignees: {
+    // list has many todos
+    todosLists: {
       forward: {
         on: 'todos',
         has: 'one',
-        label: 'memberships',
+        label: 'lists',
       },
       reverse: {
-        on: 'memberships',
+        on: 'lists',
         has: 'many',
         label: 'todos',
+      },
+    },
+    // group has many todos
+    todosGroups: {
+      forward: {
+        on: 'todos',
+        has: 'one',
+        label: 'groups',
+      },
+      reverse: {
+        on: 'groups',
+        has: 'many',
+        label: 'todos',
+      },
+    },
+    // group has many todos
+    groupsLists: {
+      forward: {
+        on: 'groups',
+        has: 'one',
+        label: 'lists',
+      },
+      reverse: {
+        on: 'lists',
+        has: 'many',
+        label: 'groups',
       },
     },
     // team has many drawings

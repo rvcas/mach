@@ -8,6 +8,24 @@ export default {
       update: 'isMember',
     },
   },
+  lists: {
+    bind: ['isMember', "auth.id in data.ref('teams.memberships.userId')"],
+    allow: {
+      view: 'isMember',
+      create: 'isMember',
+      delete: 'isMember',
+      update: 'isMember',
+    },
+  },
+  groups: {
+    bind: ['isMember', "auth.id in data.ref('teams.memberships.userId')"],
+    allow: {
+      view: 'isMember',
+      create: 'isMember',
+      delete: 'isMember',
+      update: 'isMember',
+    },
+  },
   drawings: {
     bind: ['isMember', "auth.id in data.ref('teams.memberships.userId')"],
     allow: {
