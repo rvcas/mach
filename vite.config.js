@@ -13,6 +13,9 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
+    fs: {
+      allow: ['instant.schema.ts'],
+    },
     watch: {
       // 3. tell vite to ignore watching `src-tauri`
       ignored: ['**/src-tauri/**'],
