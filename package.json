@@ -17,7 +17,8 @@
   "dependencies": {
     "@instantdb/core": "^0.12.37",
     "@tauri-apps/api": "2.0.0-rc.4",
-    "@tauri-apps/plugin-shell": "^2.0.0-rc"
+    "@tauri-apps/plugin-shell": "^2.0.0-rc",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.1",
@@ -26,8 +27,8 @@
     "@sveltejs/vite-plugin-svelte": "^3.0.0",
     "@tailwindcss/typography": "^0.5.14",
     "@tauri-apps/cli": "2.0.0-rc.13",
-    "autoprefixer": "^10.4.20",
     "@types/eslint": "^9.6.0",
+    "autoprefixer": "^10.4.20",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-svelte": "^2.36.0",
