@@ -4,6 +4,8 @@ import schema, { APP_ID } from '../../instant.schema';
 
 export const db = init_experimental({ appId: APP_ID, schema });
 
+export const getId = () => id();
+
 export module Todo {
   export function create(text: string) {
     return db.transact(

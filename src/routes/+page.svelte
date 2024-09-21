@@ -1,10 +1,45 @@
 <script lang="ts">
-  import { Todo, db } from '$lib/instant';
+  import { Todo, db, getId } from '$lib/instant';
   import { invoke } from '@tauri-apps/api/core';
+  import { onMount } from 'svelte';
 
   let name = $state('');
   let greetMsg = $state('');
   let todos: { id: string }[] = $state([]);
+
+  onMount(() => {
+    db.subscribeAuth((auth) => {
+      const user = auth.user!;
+
+      if (
+        !db.subscribeQuery(
+          { teams: { $: { where: { creatorId: user.id } } } },
+          (resp) => {
+            return resp.data?.teams;
+          },
+        )
+      ) {
+        const teamId = getId();
+        const membershipsId = getId();
+        // Create default team for new user
+        db.transact([
+          db.tx.teams[teamId].update({
+            creatorId: user.id,
+            isDefault: true,
+            name: 'default',
+          }),
+
+          db.tx.memberships[membershipsId].update({
+            teamId,
+            userEmail: user.email,
+            userId: user.id,
+          }),
+
+          db.tx.memberships[membershipsId].link({ teams: teamId }),
+        ]);
+      }
+    });
+  });
 
   db.subscribeQuery({ todos: {} }, (resp) => {
     if (resp.error) {
