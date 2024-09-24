@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { db } from '$lib/instant';
+  import { todosTeamState } from '$lib/todos.svelte';
   import { type InstantQueryResult, type User, id } from '@instantdb/core';
   import { onMount } from 'svelte';
 
@@ -9,22 +10,12 @@
   // let { teamName, teamId }: { teamName: string; teamId: string } = ;
 
   let user: User | undefined = $state();
-  let teamName = $state('');
-  let teamId = $state('');
+
   let todos: Todos = $state([]);
   let todoText: string = $state('');
   let todoDate: number | undefined = $state();
 
-  // export function load({
-  //   params,
-  // }: {
-  //   params: { teamName: string; teamId: string };
-  // }) {
-  //   console.log('SUPER HERE');
-  //   console.log(params);
-  //   teamName = params.teamName;
-  //   teamId = params.teamId;
-  // }
+  const teamState = todosTeamState();
 
   onMount(() => {
     const unsub = db.subscribeAuth((auth) => {
@@ -32,7 +23,7 @@
     });
 
     const unsubQuery = db.subscribeQuery(
-      { todos: { $: { where: { teams: teamId } } } },
+      { todos: { $: { where: { teams: teamState.teamId } } } },
       (resp) => {
         if (resp.data) {
           todos = resp.data.todos;
@@ -49,9 +40,6 @@
   async function createTodo(e: Event) {
     e.preventDefault();
 
-    console.log(teamId);
-    console.log(teamName);
-
     if (user) {
       try {
         const todoId = id();
@@ -61,6 +49,9 @@
             text: todoText,
             done: false,
             date: todoDate || Date.now(),
+          }),
+          db.tx.todos[todoId].link({
+            teams: teamState.teamId,
           }),
         ]);
 
@@ -73,7 +64,7 @@
 </script>
 
 <div>
-  <h1>TODOs for Team{teamName}</h1>
+  <h1>TODOs for Team: {teamState.teamName}</h1>
 
   <button
     type="button"

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Todo, db, type Thing } from '$lib/instant';
+  import { db } from '$lib/instant';
   import {
     type InstantQueryResult,
     type LifecycleSubscriptionState,
@@ -9,18 +9,17 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
 
-  import Todos from './todos/+page.svelte';
+  import { todosTeamState } from '$lib/todos.svelte';
   import { goto } from '$app/navigation';
 
   type Teams = InstantQueryResult<typeof db, { teams: {} }>['teams'];
 
-  let name = $state('');
-  let greetMsg = $state('');
   let user: User | undefined = $state();
-  let currentTeam: Teams[0] | undefined = $state();
   let teams: Teams = $state([]);
   let defaultTeamName = $state('');
   let teamName = $state('');
+
+  const teamState = todosTeamState();
 
   let missingDefaultTeam: boolean = $derived(
     user !== undefined && teams.length === 0,
@@ -153,7 +152,10 @@
         <button
           type="button"
           onclick={() => {
-            goto(`/todos?teamName=${team.name},teamId=${team.id})}`);
+            teamState.setTeamId(team.id);
+            teamState.setTeamName(team.name);
+
+            goto(`/todos`);
           }}>{team.id},{team.name},{team.isDefault}</button
         >
       </div>
