@@ -1,29 +1,21 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { db } from '$lib/instant';
-  import { todosTeamState } from '$lib/todos.svelte';
+  import { teamState } from '$lib/team.svelte';
   import { type InstantQueryResult, type User, id } from '@instantdb/core';
   import { onMount } from 'svelte';
 
   type Todos = InstantQueryResult<typeof db, { todos: {} }>['todos'];
 
-  // let { teamName, teamId }: { teamName: string; teamId: string } = ;
-
-  let user: User | undefined = $state();
+  const selectedTeamState = teamState();
 
   let todos: Todos = $state([]);
   let todoText: string = $state('');
   let todoDate: number | undefined = $state();
 
-  const teamState = todosTeamState();
-
   onMount(() => {
-    const unsub = db.subscribeAuth((auth) => {
-      user = auth.user;
-    });
-
     const unsubQuery = db.subscribeQuery(
-      { todos: { $: { where: { teams: teamState.teamId } } } },
+      { todos: { $: { where: { teams: selectedTeamState.teamId } } } },
       (resp) => {
         if (resp.data) {
           todos = resp.data.todos;
@@ -32,7 +24,6 @@
     );
 
     return () => {
-      unsub();
       unsubQuery();
     };
   });
@@ -40,31 +31,29 @@
   async function createTodo(e: Event) {
     e.preventDefault();
 
-    if (user) {
-      try {
-        const todoId = id();
+    try {
+      const todoId = id();
 
-        const result = await db.transact([
-          db.tx.todos[todoId].update({
-            text: todoText,
-            done: false,
-            date: todoDate || Date.now(),
-          }),
-          db.tx.todos[todoId].link({
-            teams: teamState.teamId,
-          }),
-        ]);
+      const result = await db.transact([
+        db.tx.todos[todoId].update({
+          text: todoText,
+          done: false,
+          date: todoDate || Date.now(),
+        }),
+        db.tx.todos[todoId].link({
+          teams: selectedTeamState.teamId,
+        }),
+      ]);
 
-        console.log(result);
-      } catch (e) {
-        console.log(e);
-      }
+      console.log(result);
+    } catch (e) {
+      console.log(e);
     }
   }
 </script>
 
 <div>
-  <h1>TODOs for Team: {teamState.teamName}</h1>
+  <h1>TODOs for Team: {selectedTeamState.teamName}</h1>
 
   <button
     type="button"

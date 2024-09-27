@@ -6,28 +6,30 @@
     type User,
     id,
   } from '@instantdb/core';
-  import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
 
-  import { todosTeamState } from '$lib/todos.svelte';
+  import { teamState } from '$lib/team.svelte';
+  import { userAuthState } from '$lib/user.svelte';
   import { goto } from '$app/navigation';
 
   type Teams = InstantQueryResult<typeof db, { teams: {} }>['teams'];
 
-  let user: User | undefined = $state();
   let teams: Teams = $state([]);
   let defaultTeamName = $state('');
   let teamName = $state('');
 
-  const teamState = todosTeamState();
+  const selectedTeamState = teamState();
+  const user = userAuthState();
 
   let missingDefaultTeam: boolean = $derived(
-    user !== undefined && teams.length === 0,
+    user.authState !== undefined && teams.length === 0,
   );
 
   onMount(() => {
     const unsub = db.subscribeAuth((auth) => {
-      user = auth.user;
+      if (auth.user) {
+        user.setAuthState(auth.user);
+      }
     });
 
     const unsubQuery = db.subscribeQuery({ teams: {} }, (resp) => {
@@ -45,7 +47,7 @@
   async function makeDefaultTeam(e: Event) {
     e.preventDefault();
 
-    if (user) {
+    if (user.authState) {
       try {
         const teamId = id();
         const membershipsId = id();
@@ -53,15 +55,15 @@
         // Create default team for new user
         const result = await db.transact([
           db.tx.teams[teamId].update({
-            creatorId: user.id,
+            creatorId: user.authState.id,
             isDefault: true,
             name: defaultTeamName,
           }),
 
           db.tx.memberships[membershipsId].update({
             teamId,
-            userEmail: user.email,
-            userId: user.id,
+            userEmail: user.authState.email,
+            userId: user.authState.id,
           }),
 
           db.tx.memberships[membershipsId].link({ teams: teamId }),
@@ -77,7 +79,7 @@
   async function makeTeam(e: Event) {
     e.preventDefault();
 
-    if (user) {
+    if (user.authState) {
       try {
         const teamId = id();
         const membershipsId = id();
@@ -85,15 +87,15 @@
         // Create default team for new user
         const result = await db.transact([
           db.tx.teams[teamId].update({
-            creatorId: user.id,
+            creatorId: user.authState.id,
             isDefault: false,
             name: teamName,
           }),
 
           db.tx.memberships[membershipsId].update({
             teamId,
-            userEmail: user.email,
-            userId: user.id,
+            userEmail: user.authState.email,
+            userId: user.authState.id,
           }),
 
           db.tx.memberships[membershipsId].link({ teams: teamId }),
@@ -104,6 +106,10 @@
         console.log(e);
       }
     }
+  }
+
+  async function logout() {
+    await db.auth.signOut();
   }
 </script>
 
@@ -132,6 +138,14 @@
 {:else}
   <div class="grid grid-cols-1 gap-4">
     <h1 class="text-2xl">Teams</h1>
+    <button
+      type="button"
+      onclick={() => {
+        logout();
+      }}
+    >
+      LOG OUT
+    </button>
 
     <form onsubmit={makeTeam} class="flex flex-col gap-8">
       <input
@@ -149,18 +163,38 @@
       </button>
     </form>
 
+    <button
+      type="button"
+      onclick={() => {
+        goto('/invites');
+      }}
+    >
+      View Invites
+    </button>
+
     {#each teams as team}
       <div class="p-8 flex flex-col gap-4">
         <button
           type="button"
           onclick={() => {
-            teamState.setTeamId(team.id);
-            teamState.setTeamName(team.name);
+            selectedTeamState.setTeamId(team.id);
+            selectedTeamState.setTeamName(team.name);
+
+            goto(`/team`);
+          }}
+        >
+          {team.id},{team.name},{team.isDefault}
+        </button>
+        <button
+          type="button"
+          onclick={() => {
+            selectedTeamState.setTeamId(team.id);
+            selectedTeamState.setTeamName(team.name);
 
             goto(`/todos`);
           }}
         >
-          {team.id},{team.name},{team.isDefault}
+          TODOS
         </button>
       </div>
     {/each}

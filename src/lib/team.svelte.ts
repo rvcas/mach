@@ -1,7 +1,7 @@
 let teamName = $state('');
 let teamId = $state('');
 
-export function todosTeamState() {
+export function teamState() {
   function setTeamName(name: string) {
     teamName = name;
   }

@@ -1,6 +1,6 @@
 import { i } from '@instantdb/core';
 
-export const APP_ID = '409c6ca4-bdd4-43e2-b342-ce12cc7ca281';
+export const APP_ID = '6a68d747-241c-43e0-985e-a19d40338716';
 
 const graph = i.graph(
   APP_ID,
