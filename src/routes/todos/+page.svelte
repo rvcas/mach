@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
 
   type Todos = InstantQueryResult<typeof db, { todos: {} }>['todos'];
+  type Todo = Todos[0];
 
   const selectedTeamState = teamState();
 
@@ -15,7 +16,11 @@
 
   onMount(() => {
     const unsubQuery = db.subscribeQuery(
-      { todos: { $: { where: { teams: selectedTeamState.teamId } } } },
+      {
+        todos: {
+          $: { where: { teams: selectedTeamState.teamId, done: false } },
+        },
+      },
       (resp) => {
         if (resp.data) {
           todos = resp.data.todos;
@@ -42,6 +47,20 @@
         }),
         db.tx.todos[todoId].link({
           teams: selectedTeamState.teamId,
+        }),
+      ]);
+
+      console.log(result);
+    } catch (e) {
+      console.log(e);
+    }
+  }
+
+  async function finishTodo(t: Todo) {
+    try {
+      const result = await db.transact([
+        db.tx.todos[t.id].update({
+          done: true,
         }),
       ]);
 
@@ -89,7 +108,14 @@
 
   {#each todos as todo}
     <div class="p-8 flex flex-col gap-4">
-      <p>{todo.id},{todo.text},{todo.date},{todo.done}</p>
+      <button
+        type="button"
+        onclick={() => {
+          finishTodo(todo);
+        }}
+      >
+        {todo.text},{todo.date},{todo.done}
+      </button>
     </div>
   {/each}
 </div>

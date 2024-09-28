@@ -5,22 +5,18 @@
   import { onMount } from 'svelte';
   import { userAuthState } from '$lib/user.svelte';
 
-  type Invites = InstantQueryResult<
-    typeof db,
-    { invites: { teams: {} } }
-  >['invites'];
+  type Invites = InstantQueryResult<typeof db, { invites: {} }>['invites'];
+  type Invite = Invites[0];
 
   const user = userAuthState();
 
   let invites: Invites = $state([]);
-  type Invite = (typeof invites)[0];
 
   onMount(() => {
     if (user.authState) {
       const unsub = db.subscribeQuery(
         {
           invites: {
-            teams: {},
             $: { where: { userEmail: user.authState.email } },
           },
         },
@@ -40,24 +36,35 @@
   });
 
   async function acceptInvite(invite: Invite) {
-    console.log(invite);
-    if (user.authState && invite.teams) {
+    if (user.authState) {
       try {
         const memberId = id();
 
         const result = await db.transact([
           db.tx.memberships[memberId].update({
-            teamId: invite.teams.id,
+            teamId: invite.teamId,
             userEmail: user.authState.email,
             userId: user.authState.id,
           }),
-          db.tx.memberships[memberId].link({ teams: invite.teams.id }),
+          db.tx.memberships[memberId].link({ teams: invite.teamId }),
         ]);
 
         const result2 = await db.transact(db.tx.invites[invite.id].delete());
 
         console.log(result);
         console.log(result2);
+      } catch (e) {
+        console.log(e);
+      }
+    }
+  }
+
+  async function deleteInvite(invite: Invite) {
+    if (user.authState) {
+      try {
+        const result = await db.transact([db.tx.invites[invite.id].delete()]);
+
+        console.log(result);
       } catch (e) {
         console.log(e);
       }
@@ -87,6 +94,14 @@
         }}
       >
         Join
+      </button>
+      <button
+        type="button"
+        onclick={() => {
+          deleteInvite(invite);
+        }}
+      >
+        Delete
       </button>
     </div>
   {/each}

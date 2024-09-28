@@ -11,6 +11,9 @@
     { memberships: {} }
   >['memberships'];
 
+  type Invites = InstantQueryResult<typeof db, { invites: {} }>['invites'];
+  type Invite = Invites[0];
+
   const selectedTeamState = teamState();
   const formSchema = z.string().email({ message: 'Invalid email address' });
 
@@ -19,6 +22,7 @@
   let inviteSent: boolean = $state(false);
 
   let members: Memberships = $state([]);
+  let invites: Invites = $state([]);
 
   onMount(() => {
     const unsub = db.subscribeQuery(
@@ -30,13 +34,28 @@
       },
     );
 
+    const unsubInvites = db.subscribeQuery(
+      { invites: { $: { where: { teams: selectedTeamState.teamId } } } },
+      (resp) => {
+        if (resp.data) {
+          invites = resp.data.invites;
+        }
+      },
+    );
+
     return () => {
       unsub();
+      unsubInvites();
     };
   });
 
   async function invite(e: Event) {
     e.preventDefault();
+
+    // if (inviteeEmail in invites.map((i) => i.userEmail)) {
+    //   issue = 'Already invited';
+    //   return;
+    // }
 
     try {
       const validatedEmail = formSchema.parse(inviteeEmail);
@@ -58,6 +77,15 @@
       if (e instanceof z.ZodError) {
         issue = e.issues[0].message;
       }
+      console.log(e);
+    }
+  }
+
+  async function cancelInvite(i: Invite) {
+    try {
+      const result = await db.transact([db.tx.invites[i.id].delete()]);
+      console.log(result);
+    } catch (e) {
       console.log(e);
     }
   }
@@ -97,9 +125,25 @@
     {/if}
   </form>
 
+  <h2>Members</h2>
   {#each members as member}
     <div class="p-8 flex flex-col gap-4">
-      <p>{member.userId},{member.userEmail}</p>
+      <p>{member.userEmail}</p>
+    </div>
+  {/each}
+
+  <h2>Pending Invites</h2>
+  {#each invites as invite}
+    <div class="p-8 flex flex-col gap-4">
+      <p>{invite.userEmail}</p>
+      <button
+        type="button"
+        onclick={() => {
+          cancelInvite(invite);
+        }}
+      >
+        Cancel
+      </button>
     </div>
   {/each}
 </div>

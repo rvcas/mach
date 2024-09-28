@@ -47,6 +47,9 @@
   async function makeDefaultTeam(e: Event) {
     e.preventDefault();
 
+    console.log('HEREERE');
+    console.log(user.authState);
+
     if (user.authState) {
       try {
         const teamId = id();
@@ -78,6 +81,8 @@
 
   async function makeTeam(e: Event) {
     e.preventDefault();
+
+    console.log('HEREERE');
 
     if (user.authState) {
       try {

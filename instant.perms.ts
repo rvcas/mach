@@ -85,7 +85,7 @@ export default {
       'auth.id == data.creatorId',
     ],
     allow: {
-      view: 'isMember || isInvitee',
+      view: 'isMember',
       create: 'isMember && isCreator',
       delete: 'isCreator && !isDefault',
       update:
