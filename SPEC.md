@@ -13,7 +13,7 @@
 
 - **Todo Entity**
   - Fields: `id` (UUID), `title` (String), `status` (String, defaults to `"pending"`),
-    `scheduled_for` (Option<Date>), `order_index` (i64 for deterministic intra-column sorting),
+    `scheduled_for` (`Option<Date>`), `order_index` (i64 for deterministic intra-column sorting),
     `created_at`, `updated_at`, `notes` (optional text), `metadata` (JSON for future tags/links).
   - Backlog/Someday is derived by `scheduled_for.is_none()`.
   - Only string statuses for now (`pending`, `done`), but stored as free-form
