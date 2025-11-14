@@ -18,9 +18,12 @@ ratatui = { version = "0.29.0", features = [
   "widget-calendar"
 ] }
 sea-orm = { version = "2.0.0-rc", features = [
+  "entity-registry",
   "macros",
   "runtime-tokio-rustls",
-  "sqlx-sqlite"
+  "schema-sync",
+  "sqlx-sqlite",
+  "with-chrono"
 ] }
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.17"

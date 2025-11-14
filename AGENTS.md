@@ -36,10 +36,23 @@
 - Four-space indentation, `snake_case` modules, `PascalCase` types,
  `SCREAMING_SNAKE_CASE` constants. Keep functions ~50 LOC and split
   widgets/services as they grow.
-- Co-locate SeaORM entities with their feature modules, re-export via
-  `mod.rs`, and add terse headers for domain-heavy files (e.g., Someday lane rules).
+- Keep SeaORM entity modules under a dedicated `entity/` tree (matching
+  `sea-orm-codegen` output) and re-export them via `entity/mod.rs` so the
+  registry macro path (`mach::entity::*`) stays stable.
 - Use `miette` for diagnostics and user-facing errors; avoid `anyhow` so
   all contexts surface with consistent, nicely formatted reports.
+
+## CLI Architecture
+
+- `crates/mach/src/main.rs` bootstraps a single async entry point that parses
+  the CLI via `mach::Cli::default()` and delegates to `Cli::exec()`.
+- `crates/mach/src/cli.rs` owns the clap configuration: banner metadata,
+  versioning, and the optional subcommand dispatcher; running the binary with
+  zero args (no subcommand) launches the Ratatui UI by design.
+- Subcommands live under `crates/mach/src/cmd/` with one file per verb (e.g.,
+  `cmd::add`, `cmd::list`). Each `Args` struct derives `clap::Args` and exposes
+  an async `exec(self) -> miette::Result<()>` that should call into domain
+  services rather than performing storage logic inline.
 
 ## Testing Guidelines
 
