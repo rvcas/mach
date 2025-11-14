@@ -1,8 +1,0 @@
-# Package Managers
-package-lock.json
-pnpm-lock.yaml
-yarn.lock
-src-tauri/target
-src-tauri/gen
-Cargo.toml
-Cargo.lock
