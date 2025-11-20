@@ -9,7 +9,7 @@ use serde_json::Value as JsonValue;
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "config_entries")]
 pub struct Model {
-    #[sea_orm(primary_key)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub key: String,
     #[sea_orm(column_type = "JsonBinary")]
     pub value: JsonValue,

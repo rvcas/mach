@@ -19,6 +19,7 @@ impl Default for Cli {
 impl Cli {
     pub async fn exec(self) -> miette::Result<()> {
         let services = Services::bootstrap().await?;
+
         match self.cmd {
             Some(cmd) => cmd.exec(&services).await,
             None => {
