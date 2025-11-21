@@ -27,30 +27,31 @@ impl Args {
             scope,
             include_done: self.done,
         };
+
         let todos = services.todos.list(opts).await?;
 
         if todos.is_empty() {
             println!("No todos found.");
+
             return Ok(());
         }
 
-        println!("{:<8} {:<12} {:<7} Title", "Status", "Day", "Order");
-        println!("{}", "-".repeat(60));
+        println!("{:<8} {:<12} Title", "Status", "Day");
+        println!("{}", "-".repeat(48));
 
         for todo in todos {
             let day = todo
                 .scheduled_for
                 .map(|d| d.to_string())
                 .unwrap_or_else(|| "Someday".to_string());
+
             let status = if todo.status == "done" {
                 "done"
             } else {
-                "todo"
+                "pending"
             };
-            println!(
-                "{:<8} {:<12} {:<7} {}",
-                status, day, todo.order_index, todo.title
-            );
+
+            println!("{:<8} {:<12} {}", status, day, todo.title);
         }
 
         Ok(())

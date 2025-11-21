@@ -131,6 +131,24 @@ impl TodoService {
         active.update(&self.db).await.into_diagnostic()
     }
 
+    /// Revert a completed todo back to a pending state.
+    pub async fn mark_pending(&self, id: Uuid) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+
+        if model.status != STATUS_DONE {
+            return Ok(model);
+        }
+
+        let scope = model.scheduled_for;
+        let target_index = self.next_top_order_index(scope).await?;
+
+        let mut active: todo::ActiveModel = model.into();
+        active.status = Set("pending".to_string());
+        active.order_index = Set(target_index);
+
+        active.update(&self.db).await.into_diagnostic()
+    }
+
     /// Move overdue todos (scheduled in the past) to today.
     pub async fn rollover_to(&self, today: NaiveDate) -> Result<usize> {
         let overdue = todo::Entity::find()

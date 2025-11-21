@@ -99,10 +99,10 @@
 - [x] Wire CLI subcommands to services (`add`, `list`) respecting flags.
 - [x] Build rollover runner invoked on startup + scheduled timer.
 - [x] Scaffold Ratatui app shell: layout, input handling loop, state store.
-- [ ] Implement navigation + selection + reorder semantics (including keeping
+- [x] Implement navigation + selection + reorder semantics (including keeping
       completed todos pinned under active ones).
-- [ ] Support deletion (`dd`) and completion (Super+Enter).
-- [ ] Render backlog column distinct from dated columns.
+- [x] Support deletion (`dd`) and completion (Super+Enter).
+- [x] Render backlog column distinct from dated columns.
 - [ ] Add configuration loading/saving (week start toggle via TUI modal, future
       keybindings).
 - [ ] Tests: unit tests for services (rollover, ordering) + integration tests
