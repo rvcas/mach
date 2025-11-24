@@ -1,6 +1,6 @@
 #[tokio::main]
 async fn main() -> miette::Result<()> {
-    let cli = mach::Cli::default();
+    let cli = machich::Cli::default();
 
     cli.exec().await
 }

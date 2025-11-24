@@ -1,11 +1,15 @@
 [package]
-name = "mach"
+name = "machich"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description.workspace = true
 repository.workspace = true
 license-file.workspace = true
+
+[[bin]]
+name = "mach"
+path = "src/main.rs"
 
 [dependencies]
 chrono.workspace = true
