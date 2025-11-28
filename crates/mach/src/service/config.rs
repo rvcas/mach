@@ -57,10 +57,10 @@ impl ConfigService {
             .await
             .into_diagnostic()?;
 
-        if let Some(model) = result {
-            if let Some(value) = model.value.as_str() {
-                return Ok(WeekStart::from(value));
-            }
+        if let Some(model) = result
+            && let Some(value) = model.value.as_str()
+        {
+            return Ok(WeekStart::from(value));
         }
 
         Ok(WeekStart::Sunday)

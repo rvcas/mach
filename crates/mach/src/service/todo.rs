@@ -212,6 +212,16 @@ impl TodoService {
         Ok(updated)
     }
 
+    /// Update the backlog_column field for a backlog item.
+    pub async fn set_backlog_column(&self, id: Uuid, column: i64) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+
+        let mut active: todo::ActiveModel = model.into();
+        active.backlog_column = Set(column);
+
+        active.update(&self.db).await.into_diagnostic()
+    }
+
     /// Reorder within a column/group (pending or done).
     pub async fn reorder(&self, id: Uuid, direction: ReorderDirection) -> Result<()> {
         let model = self.load(id).await?;

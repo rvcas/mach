@@ -42,12 +42,15 @@ pub async fn run(services: Services) -> miette::Result<()> {
     Ok(())
 }
 
+const BACKLOG_COLUMNS: usize = 4;
+
 struct App {
     services: Services,
     runtime: Handle,
     state: WeekState,
     board: BoardData,
     cursor: CursorState,
+    backlog_cursor: BacklogCursor,
     week_pref: WeekStart,
     ui_mode: UiMode,
     pending_g: bool,
@@ -63,7 +66,7 @@ impl App {
         let board = BoardData::new(state.columns.len());
         let mut cursor = CursorState::new(state.columns.len());
         if let Some(idx) = state.column_index(today) {
-            cursor.set_focus_row(FocusTarget::Day(idx), 0);
+            cursor.set_focus_row(idx, 0);
         }
         Self {
             services,
@@ -71,6 +74,7 @@ impl App {
             state,
             board,
             cursor,
+            backlog_cursor: BacklogCursor::new(),
             week_pref,
             ui_mode: UiMode::Board,
             pending_g: false,
@@ -122,9 +126,16 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) {
-        if matches!(self.ui_mode, UiMode::Settings(_)) {
-            self.handle_settings_key(key);
-            return;
+        match self.ui_mode {
+            UiMode::Settings(_) => {
+                self.handle_settings_key(key);
+                return;
+            }
+            UiMode::Backlog => {
+                self.handle_backlog_key(key);
+                return;
+            }
+            UiMode::Board => {}
         }
 
         if self.pending_g {
@@ -144,6 +155,9 @@ impl App {
             KeyCode::Esc => self.should_quit = true,
             KeyCode::Char('g') if key.modifiers.is_empty() => {
                 self.pending_g = true;
+            }
+            KeyCode::Char('b') if key.modifiers.is_empty() => {
+                self.open_backlog();
             }
             KeyCode::Char('h') => self.handle_horizontal(Horizontal::Left),
             KeyCode::Char('l') => self.handle_horizontal(Horizontal::Right),
@@ -174,92 +188,186 @@ impl App {
     }
 
     fn draw(&mut self, frame: &mut Frame<'_>) {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(10)])
+        match self.ui_mode {
+            UiMode::Board => self.draw_board(frame),
+            UiMode::Backlog => self.draw_backlog_view(frame),
+            UiMode::Settings(ref settings) => {
+                self.draw_board(frame);
+                self.draw_settings(frame, settings);
+            }
+        }
+    }
+
+    fn draw_board(&self, frame: &mut Frame<'_>) {
+        let day_count = self.state.columns.len();
+        let mut constraints = Vec::with_capacity(day_count * 2 - 1);
+        for i in 0..day_count {
+            if i > 0 {
+                constraints.push(Constraint::Length(1));
+            }
+            constraints.push(Constraint::Fill(1));
+        }
+
+        let areas = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(constraints)
             .split(frame.area());
 
-        let week_columns = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(self.state.day_constraints())
-            .split(chunks[0]);
-
-        for (idx, area) in week_columns.iter().enumerate() {
-            self.draw_column(frame, idx, *area);
-        }
-
-        self.draw_backlog(frame, chunks[1]);
-
-        if let UiMode::Settings(ref settings) = self.ui_mode {
-            self.draw_settings(frame, settings);
-        }
-    }
-
-    fn draw_column(&self, frame: &mut Frame<'_>, idx: usize, area: Rect) {
-        let column = &self.state.columns[idx];
-        let focus = FocusTarget::Day(idx);
-        let focused = self.cursor.focus == focus;
-        let title = Line::from(column.title.clone());
-        let border_style = if focused {
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default()
-        };
-
-        let block = Block::default()
-            .title(title)
-            .title_style(Style::default())
-            .borders(Borders::ALL)
-            .border_style(border_style);
-
-        let mut lines = self.board.day_lines(idx);
-        if let Some(row) = self.cursor.row_for(focus, &self.board) {
-            if let Some(line) = lines.get_mut(row) {
-                let highlight = self.cursor.line_style(focus, row, &self.board);
-                line.style = line.style.patch(highlight);
+        let focused = self.cursor.focus;
+        let mut col_idx = 0;
+        for (i, &area) in areas.iter().enumerate() {
+            if i % 2 == 0 {
+                self.draw_day_column(frame, col_idx, area);
+                col_idx += 1;
+            } else {
+                let sep_idx = i / 2;
+                let adjacent_to_focus = sep_idx == focused || sep_idx + 1 == focused;
+                let style = if adjacent_to_focus {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+                let lines: Vec<Line<'_>> = (0..area.height).map(|_| Line::from("│")).collect();
+                let separator = Paragraph::new(lines).style(style);
+                frame.render_widget(separator, area);
             }
         }
-
-        let body = if lines.is_empty() {
-            Paragraph::new("No tasks yet").block(block)
-        } else {
-            Paragraph::new(lines).block(block)
-        };
-        frame.render_widget(body, area);
     }
 
-    fn draw_backlog(&self, frame: &mut Frame<'_>, area: Rect) {
-        let focus = FocusTarget::Backlog;
-        let focused = self.cursor.focus == focus;
-        let border_style = if focused {
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default()
-        };
-        let block = Block::default()
+    fn draw_backlog_view(&self, frame: &mut Frame<'_>) {
+        let outer = Block::default()
             .title("Someday / Backlog")
-            .title_style(Style::default())
             .borders(Borders::ALL)
-            .border_style(border_style);
+            .border_style(Style::default().fg(Color::Magenta));
 
-        let mut lines = self.board.backlog_lines();
-        if let Some(row) = self.cursor.row_for(focus, &self.board) {
-            if let Some(line) = lines.get_mut(row) {
-                let highlight = self.cursor.line_style(focus, row, &self.board);
-                line.style = line.style.patch(highlight);
+        let inner = outer.inner(frame.area());
+        frame.render_widget(outer, frame.area());
+
+        let mut constraints = Vec::with_capacity(BACKLOG_COLUMNS * 2 - 1);
+        for i in 0..BACKLOG_COLUMNS {
+            if i > 0 {
+                constraints.push(Constraint::Length(1));
             }
+            constraints.push(Constraint::Fill(1));
         }
 
-        let body = if lines.is_empty() {
-            Paragraph::new("Backlog is empty").block(block)
+        let areas = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(constraints)
+            .split(inner);
+
+        let focused = self.backlog_cursor.column;
+        let mut col_idx = 0;
+        for (i, &area) in areas.iter().enumerate() {
+            if i % 2 == 0 {
+                self.draw_backlog_column(frame, col_idx, area);
+                col_idx += 1;
+            } else {
+                let sep_idx = i / 2;
+                let adjacent_to_focus = sep_idx == focused || sep_idx + 1 == focused;
+                let style = if adjacent_to_focus {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
+                let lines: Vec<Line<'_>> = (0..area.height).map(|_| Line::from("│")).collect();
+                let separator = Paragraph::new(lines).style(style);
+                frame.render_widget(separator, area);
+            }
+        }
+    }
+
+    fn draw_backlog_column(&self, frame: &mut Frame<'_>, col_idx: usize, area: Rect) {
+        let focused = self.backlog_cursor.column == col_idx;
+        let items = &self.board.backlog_columns[col_idx];
+        let highlight_row = if focused {
+            self.backlog_cursor.row_for(col_idx, &self.board)
         } else {
-            Paragraph::new(lines).block(block)
+            None
         };
-        frame.render_widget(body, area);
+
+        let lines = self.build_todo_lines_with_separators(
+            items,
+            area.width,
+            highlight_row,
+            |row| self.backlog_cursor.line_style(col_idx, row, &self.board),
+        );
+
+        let para = Paragraph::new(lines);
+        frame.render_widget(para, area);
+    }
+
+    fn draw_day_column(&self, frame: &mut Frame<'_>, idx: usize, area: Rect) {
+        let column = &self.state.columns[idx];
+        let focused = self.cursor.focus == idx;
+
+        let title_style = if focused {
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+
+        let title_line = Line::from(column.title.clone()).style(title_style);
+        let underline = "─".repeat(area.width as usize);
+        let underline_line = Line::from(underline).style(title_style);
+
+        let content_area = Rect {
+            x: area.x,
+            y: area.y + 2,
+            width: area.width,
+            height: area.height.saturating_sub(2),
+        };
+
+        let items = self.board.days.get(idx).map(|d| d.as_slice()).unwrap_or(&[]);
+        let highlight_row = self.cursor.row_for(idx, &self.board);
+        let lines = self.build_todo_lines_with_separators(items, area.width, highlight_row, |row| {
+            self.cursor.line_style(idx, row, &self.board)
+        });
+
+        frame.render_widget(
+            Paragraph::new(title_line).centered(),
+            Rect { height: 1, ..area },
+        );
+        frame.render_widget(
+            Paragraph::new(underline_line),
+            Rect {
+                y: area.y + 1,
+                height: 1,
+                ..area
+            },
+        );
+
+        let body = Paragraph::new(lines);
+        frame.render_widget(body, content_area);
+    }
+
+    fn build_todo_lines_with_separators<'a, F>(
+        &self,
+        items: &'a [TodoView],
+        width: u16,
+        highlight_row: Option<usize>,
+        style_fn: F,
+    ) -> Vec<Line<'a>>
+    where
+        F: Fn(usize) -> Style,
+    {
+        let separator_line = Line::from("-".repeat(width as usize))
+            .style(Style::default().fg(Color::DarkGray));
+
+        let mut lines = Vec::with_capacity(items.len() * 2);
+        for (i, item) in items.iter().enumerate() {
+            if i > 0 {
+                lines.push(separator_line.clone());
+            }
+            let mut line = item.to_line();
+            if highlight_row == Some(i) {
+                line.style = line.style.patch(style_fn(i));
+            }
+            lines.push(line);
+        }
+        lines
     }
 
     fn change_week(&mut self, delta: i32) {
@@ -275,11 +383,33 @@ impl App {
     }
 
     fn handle_horizontal(&mut self, dir: Horizontal) {
+        let day_count = self.state.columns.len();
         if self.cursor.selection.is_some() {
-            let target = self.cursor.horizontal_target(dir, self.state.columns.len());
-            self.move_selected_to(target).ok();
+            self.move_selected_horizontal(dir).ok();
         } else {
-            self.cursor.move_horizontal(dir, self.state.columns.len());
+            match dir {
+                Horizontal::Left => {
+                    if self.cursor.focus == 0 {
+                        self.state.prev_week();
+                        self.cursor.focus = day_count - 1;
+                        self.board.reset(day_count);
+                        self.refresh_board().ok();
+                    } else {
+                        self.cursor.focus -= 1;
+                    }
+                }
+                Horizontal::Right => {
+                    if self.cursor.focus + 1 >= day_count {
+                        self.state.next_week();
+                        self.cursor.focus = 0;
+                        self.board.reset(day_count);
+                        self.refresh_board().ok();
+                    } else {
+                        self.cursor.focus += 1;
+                    }
+                }
+            }
+            self.cursor.selection = None;
         }
     }
 
@@ -291,8 +421,7 @@ impl App {
             };
             self.reorder_selected(reorder_dir).ok();
         } else {
-            self.cursor
-                .move_vertical(dir, &self.board, self.state.columns.len());
+            self.cursor.move_vertical(dir, &self.board);
         }
     }
 
@@ -306,33 +435,55 @@ impl App {
             let row = self.cursor.row_for(self.cursor.focus, &self.board);
             self.cursor.selection = Some(Selection {
                 id,
-                focus: self.cursor.focus,
+                column: self.cursor.focus,
                 row,
             });
         }
     }
 
-    fn move_selected_to(&mut self, target: FocusTarget) -> miette::Result<()> {
-        if let Some(selection) = self.cursor.selection {
-            if selection.focus == target {
-                return Ok(());
+    fn move_selected_horizontal(&mut self, dir: Horizontal) -> miette::Result<()> {
+        let Some(selection) = self.cursor.selection else {
+            return Ok(());
+        };
+
+        let day_count = self.state.columns.len();
+        let (target_col, week_changed) = match dir {
+            Horizontal::Left => {
+                if selection.column == 0 {
+                    self.state.prev_week();
+                    (day_count - 1, true)
+                } else {
+                    (selection.column - 1, false)
+                }
             }
+            Horizontal::Right => {
+                if selection.column + 1 >= day_count {
+                    self.state.next_week();
+                    (0, true)
+                } else {
+                    (selection.column + 1, false)
+                }
+            }
+        };
 
-            let scope = target.to_scope(&self.state);
-            self.runtime.block_on(self.services.todos.move_to_scope(
-                selection.id,
-                scope,
-                MovePlacement::Bottom,
-            ))?;
+        let target_date = self.state.columns[target_col].date;
+        self.runtime.block_on(self.services.todos.move_to_scope(
+            selection.id,
+            ListScope::Day(target_date),
+            MovePlacement::Bottom,
+        ))?;
 
-            self.cursor.selection = Some(Selection {
-                focus: target,
-                row: None,
-                ..selection
-            });
-            self.cursor.focus = target;
-            self.refresh_board()?;
+        if week_changed {
+            self.board.reset(day_count);
         }
+        self.refresh_board()?;
+
+        self.cursor.selection = Some(Selection {
+            column: target_col,
+            row: None,
+            ..selection
+        });
+        self.cursor.focus = target_col;
 
         Ok(())
     }
@@ -360,17 +511,33 @@ impl App {
                 .set_day(idx, todos.into_iter().map(TodoView::from).collect());
         }
 
-        let backlog = self
+        self.refresh_backlog()?;
+
+        self.cursor
+            .sync_after_refresh(self.state.columns.len(), &self.board);
+
+        Ok(())
+    }
+
+    fn refresh_backlog(&mut self) -> miette::Result<()> {
+        let all_backlog = self
             .runtime
             .block_on(self.services.todos.list(ListOptions {
                 scope: ListScope::Backlog,
                 include_done: true,
             }))?;
-        self.board
-            .set_backlog(backlog.into_iter().map(TodoView::from).collect());
 
-        self.cursor
-            .sync_after_refresh(self.state.columns.len(), &self.board);
+        let mut columns: [Vec<TodoView>; BACKLOG_COLUMNS] = Default::default();
+        for todo in all_backlog {
+            let col = (todo.backlog_column as usize).min(BACKLOG_COLUMNS - 1);
+            columns[col].push(TodoView::from(todo));
+        }
+
+        for (col, items) in columns.into_iter().enumerate() {
+            self.board.set_backlog_column(col, items);
+        }
+
+        self.backlog_cursor.sync_after_refresh(&self.board);
 
         Ok(())
     }
@@ -395,7 +562,11 @@ impl App {
 
     fn mark_complete(&mut self) -> miette::Result<()> {
         if let Some(id) = self.current_target_id() {
-            let current_status = self.board.status_of(id).unwrap_or("pending").to_string();
+            let current_status = self
+                .board
+                .day_status_of(id)
+                .unwrap_or("pending")
+                .to_string();
 
             let focus = self.cursor.focus;
             let prev_row = self.cursor.row_for(focus, &self.board);
@@ -412,10 +583,10 @@ impl App {
 
             self.refresh_board()?;
 
-            if let Some((new_focus, row)) = self.board.find_position(id) {
-                self.cursor.set_focus_row(new_focus, row);
+            if let Some((new_col, row)) = self.board.find_day_position(id) {
+                self.cursor.set_focus_row(new_col, row);
             } else if let Some(row) = prev_row {
-                let len = self.board.len_for(focus);
+                let len = self.board.day_len(focus);
                 if len > 0 {
                     let new_row = row.min(len.saturating_sub(1));
                     self.cursor.set_focus_row(focus, new_row);
@@ -427,7 +598,7 @@ impl App {
 
     fn move_to_backlog(&mut self) -> miette::Result<()> {
         if let Some(id) = self.current_target_id() {
-            if matches!(self.board.status_of(id), Some("done")) {
+            if matches!(self.board.day_status_of(id), Some("done")) {
                 return Ok(());
             }
             self.cursor.selection = None;
@@ -437,10 +608,183 @@ impl App {
                 MovePlacement::Bottom,
             ))?;
             self.refresh_board()?;
-            if let Some((focus, row)) = self.board.find_position(id) {
-                self.cursor.set_focus_row(focus, row);
+        }
+        Ok(())
+    }
+
+    fn open_backlog(&mut self) {
+        self.ui_mode = UiMode::Backlog;
+    }
+
+    fn handle_backlog_key(&mut self, key: KeyEvent) {
+        if !matches!(key.code, KeyCode::Char('d')) {
+            self.pending_delete = false;
+        }
+
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('b') => {
+                self.ui_mode = UiMode::Board;
+            }
+            KeyCode::Char('h') => self.handle_backlog_horizontal(Horizontal::Left),
+            KeyCode::Char('l') => self.handle_backlog_horizontal(Horizontal::Right),
+            KeyCode::Char('j') => self.handle_backlog_vertical(Vertical::Down),
+            KeyCode::Char('k') => self.handle_backlog_vertical(Vertical::Up),
+            KeyCode::Enter => self.toggle_backlog_selection(),
+            KeyCode::Char('x') if key.modifiers.is_empty() => {
+                self.mark_backlog_complete().ok();
+            }
+            KeyCode::Char('d') if key.modifiers.is_empty() => {
+                if self.pending_delete {
+                    self.delete_backlog_current().ok();
+                    self.pending_delete = false;
+                } else {
+                    self.pending_delete = true;
+                }
+            }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.should_quit = true;
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_backlog_horizontal(&mut self, dir: Horizontal) {
+        if self.backlog_cursor.selection.is_some() {
+            self.move_backlog_selected_horizontal(dir).ok();
+        } else {
+            self.backlog_cursor.move_horizontal(dir);
+        }
+    }
+
+    fn handle_backlog_vertical(&mut self, dir: Vertical) {
+        if self.backlog_cursor.selection.is_some() {
+            let reorder_dir = match dir {
+                Vertical::Up => ReorderDirection::Up,
+                Vertical::Down => ReorderDirection::Down,
+            };
+            self.reorder_backlog_selected(reorder_dir).ok();
+        } else {
+            self.backlog_cursor.move_vertical(dir, &self.board);
+        }
+    }
+
+    fn toggle_backlog_selection(&mut self) {
+        if self.backlog_cursor.selection.is_some() {
+            self.backlog_cursor.selection = None;
+            return;
+        }
+
+        if let Some(id) = self.backlog_cursor.current_todo_id(&self.board) {
+            let row = self
+                .backlog_cursor
+                .row_for(self.backlog_cursor.column, &self.board);
+            self.backlog_cursor.selection = Some(BacklogSelection {
+                id,
+                column: self.backlog_cursor.column,
+                row,
+            });
+        }
+    }
+
+    fn move_backlog_selected_horizontal(&mut self, dir: Horizontal) -> miette::Result<()> {
+        let Some(selection) = self.backlog_cursor.selection else {
+            return Ok(());
+        };
+
+        let target_col = match dir {
+            Horizontal::Left => {
+                if selection.column == 0 {
+                    return Ok(());
+                }
+                selection.column - 1
+            }
+            Horizontal::Right => {
+                if selection.column + 1 >= BACKLOG_COLUMNS {
+                    return Ok(());
+                }
+                selection.column + 1
+            }
+        };
+
+        self.runtime.block_on(
+            self.services
+                .todos
+                .set_backlog_column(selection.id, target_col as i64),
+        )?;
+
+        self.refresh_backlog()?;
+
+        self.backlog_cursor.selection = Some(BacklogSelection {
+            column: target_col,
+            row: None,
+            ..selection
+        });
+        self.backlog_cursor.column = target_col;
+
+        Ok(())
+    }
+
+    fn reorder_backlog_selected(&mut self, dir: ReorderDirection) -> miette::Result<()> {
+        if let Some(selection) = self.backlog_cursor.selection {
+            self.runtime
+                .block_on(self.services.todos.reorder(selection.id, dir))?;
+            if let Some(sel) = &mut self.backlog_cursor.selection {
+                sel.row = None;
+            }
+            self.refresh_backlog()?;
+        }
+        Ok(())
+    }
+
+    fn backlog_current_target_id(&self) -> Option<Uuid> {
+        self.backlog_cursor
+            .selection
+            .map(|sel| sel.id)
+            .or_else(|| self.backlog_cursor.current_todo_id(&self.board))
+    }
+
+    fn delete_backlog_current(&mut self) -> miette::Result<()> {
+        if let Some(id) = self.backlog_current_target_id() {
+            let deleted = self.runtime.block_on(self.services.todos.delete(id))?;
+            if deleted {
+                self.backlog_cursor.selection = None;
+                self.refresh_backlog()?;
+            }
+        }
+        Ok(())
+    }
+
+    fn mark_backlog_complete(&mut self) -> miette::Result<()> {
+        if let Some(id) = self.backlog_current_target_id() {
+            let current_status = self
+                .board
+                .backlog_status_of(id)
+                .unwrap_or("pending")
+                .to_string();
+
+            let col = self.backlog_cursor.column;
+            let prev_row = self.backlog_cursor.row_for(col, &self.board);
+            self.backlog_cursor.selection = None;
+
+            if current_status == "done" {
+                self.runtime
+                    .block_on(self.services.todos.mark_pending(id))?;
             } else {
-                self.cursor.set_focus_row(FocusTarget::Backlog, 0);
+                let today = self.services.today();
+                self.runtime
+                    .block_on(self.services.todos.mark_done(id, today))?;
+            }
+
+            self.refresh_backlog()?;
+
+            if let Some((new_col, row)) = self.board.find_backlog_position(id) {
+                self.backlog_cursor.column = new_col;
+                self.backlog_cursor.rows[new_col] = row;
+            } else if let Some(row) = prev_row {
+                let len = self.board.backlog_col_len(col);
+                if len > 0 {
+                    self.backlog_cursor.rows[col] = row.min(len.saturating_sub(1));
+                }
             }
         }
         Ok(())
@@ -503,7 +847,7 @@ impl App {
         self.board = BoardData::new(self.state.columns.len());
         self.cursor = CursorState::new(self.state.columns.len());
         if let Some(idx) = self.state.column_index(self.services.today()) {
-            self.cursor.set_focus_row(FocusTarget::Day(idx), 0);
+            self.cursor.set_focus_row(idx, 0);
         }
 
         self.refresh_board().ok();
@@ -545,14 +889,6 @@ impl WeekState {
         }
     }
 
-    fn day_constraints(&self) -> Vec<Constraint> {
-        let count = self.columns.len() as u32;
-        self.columns
-            .iter()
-            .map(|_| Constraint::Ratio(1, count))
-            .collect()
-    }
-
     fn prev_week(&mut self) {
         self.week_start -= ChronoDuration::days(7);
         self.columns = build_columns(self.week_start);
@@ -581,6 +917,7 @@ struct SettingsState {
 
 enum UiMode {
     Board,
+    Backlog,
     Settings(SettingsState),
 }
 
@@ -644,20 +981,22 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
 
 struct BoardData {
     days: Vec<Vec<TodoView>>,
-    backlog: Vec<TodoView>,
+    backlog_columns: [Vec<TodoView>; BACKLOG_COLUMNS],
 }
 
 impl BoardData {
     fn new(num_days: usize) -> Self {
         Self {
             days: vec![Vec::new(); num_days],
-            backlog: Vec::new(),
+            backlog_columns: Default::default(),
         }
     }
 
     fn reset(&mut self, num_days: usize) {
         self.days = vec![Vec::new(); num_days];
-        self.backlog.clear();
+        for col in &mut self.backlog_columns {
+            col.clear();
+        }
     }
 
     fn set_day(&mut self, idx: usize, todos: Vec<TodoView>) {
@@ -667,59 +1006,66 @@ impl BoardData {
         self.days[idx] = todos;
     }
 
-    fn day_lines(&self, idx: usize) -> Vec<Line<'_>> {
-        self.days
-            .get(idx)
-            .map(|todos| todos.iter().map(TodoView::to_line).collect())
-            .unwrap_or_default()
+    fn day_len(&self, idx: usize) -> usize {
+        self.days.get(idx).map(|d| d.len()).unwrap_or(0)
     }
 
-    fn len_for(&self, focus: FocusTarget) -> usize {
-        match focus {
-            FocusTarget::Day(idx) => self.days.get(idx).map(|d| d.len()).unwrap_or(0),
-            FocusTarget::Backlog => self.backlog.len(),
+    fn day_todo_id_at(&self, col: usize, row: usize) -> Option<Uuid> {
+        self.days.get(col)?.get(row).map(|todo| todo.id)
+    }
+
+    fn set_backlog_column(&mut self, col: usize, todos: Vec<TodoView>) {
+        if col < BACKLOG_COLUMNS {
+            self.backlog_columns[col] = todos;
         }
     }
 
-    fn todo_id_at(&self, focus: FocusTarget, row: usize) -> Option<Uuid> {
-        match focus {
-            FocusTarget::Day(idx) => self.days.get(idx)?.get(row).map(|todo| todo.id),
-            FocusTarget::Backlog => self.backlog.get(row).map(|todo| todo.id),
+    fn backlog_col_len(&self, col: usize) -> usize {
+        if col < BACKLOG_COLUMNS {
+            self.backlog_columns[col].len()
+        } else {
+            0
         }
     }
 
-    fn set_backlog(&mut self, todos: Vec<TodoView>) {
-        self.backlog = todos;
+    fn backlog_todo_id_at(&self, col: usize, row: usize) -> Option<Uuid> {
+        self.backlog_columns.get(col)?.get(row).map(|todo| todo.id)
     }
 
-    fn backlog_lines(&self) -> Vec<Line<'_>> {
-        self.backlog.iter().map(TodoView::to_line).collect()
-    }
-
-    fn find_position(&self, id: Uuid) -> Option<(FocusTarget, usize)> {
+    fn find_day_position(&self, id: Uuid) -> Option<(usize, usize)> {
         for (idx, day) in self.days.iter().enumerate() {
             if let Some(pos) = day.iter().position(|todo| todo.id == id) {
-                return Some((FocusTarget::Day(idx), pos));
+                return Some((idx, pos));
             }
         }
-
-        if let Some(pos) = self.backlog.iter().position(|todo| todo.id == id) {
-            return Some((FocusTarget::Backlog, pos));
-        }
-
         None
     }
 
-    fn status_of(&self, id: Uuid) -> Option<&str> {
+    fn find_backlog_position(&self, id: Uuid) -> Option<(usize, usize)> {
+        for (col, items) in self.backlog_columns.iter().enumerate() {
+            if let Some(pos) = items.iter().position(|todo| todo.id == id) {
+                return Some((col, pos));
+            }
+        }
+        None
+    }
+
+    fn day_status_of(&self, id: Uuid) -> Option<&str> {
         for day in &self.days {
             if let Some(todo) = day.iter().find(|todo| todo.id == id) {
                 return Some(todo.status.as_str());
             }
         }
-        self.backlog
-            .iter()
-            .find(|todo| todo.id == id)
-            .map(|todo| todo.status.as_str())
+        None
+    }
+
+    fn backlog_status_of(&self, id: Uuid) -> Option<&str> {
+        for col in &self.backlog_columns {
+            if let Some(todo) = col.iter().find(|todo| todo.id == id) {
+                return Some(todo.status.as_str());
+            }
+        }
+        None
     }
 }
 
@@ -750,152 +1096,65 @@ impl From<todo::Model> for TodoView {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum FocusTarget {
-    Day(usize),
-    Backlog,
-}
-
-impl FocusTarget {
-    fn to_scope(self, state: &WeekState) -> ListScope {
-        match self {
-            FocusTarget::Day(idx) => {
-                let date = state.columns[idx].date;
-                ListScope::Day(date)
-            }
-            FocusTarget::Backlog => ListScope::Backlog,
-        }
-    }
-}
-
 struct CursorState {
-    focus: FocusTarget,
+    focus: usize,
     day_rows: Vec<usize>,
-    backlog_row: usize,
     selection: Option<Selection>,
 }
 
 impl CursorState {
     fn new(num_days: usize) -> Self {
         Self {
-            focus: FocusTarget::Day(0),
+            focus: 0,
             day_rows: vec![0; num_days],
-            backlog_row: 0,
             selection: None,
         }
     }
 
-    fn move_horizontal(&mut self, dir: Horizontal, day_count: usize) {
-        self.focus = match (self.focus, dir) {
-            (FocusTarget::Day(0), Horizontal::Left) => FocusTarget::Backlog,
-            (FocusTarget::Day(idx), Horizontal::Left) => FocusTarget::Day(idx - 1),
-            (FocusTarget::Day(idx), Horizontal::Right) if idx + 1 < day_count => {
-                FocusTarget::Day(idx + 1)
-            }
-            (FocusTarget::Day(_), Horizontal::Right) => FocusTarget::Backlog,
-            (FocusTarget::Backlog, Horizontal::Right) => FocusTarget::Day(0),
-            (FocusTarget::Backlog, Horizontal::Left) => {
-                FocusTarget::Day(day_count.saturating_sub(1))
-            }
-        };
-        self.selection = None;
-    }
-
-    fn move_vertical(&mut self, dir: Vertical, board: &BoardData, day_count: usize) {
-        match self.focus {
-            FocusTarget::Day(idx) => {
-                if idx >= day_count {
-                    return;
-                }
-                let len = board.len_for(self.focus);
-                if len == 0 {
-                    self.day_rows[idx] = 0;
-                    return;
-                }
-                let row = &mut self.day_rows[idx];
-                match dir {
-                    Vertical::Up => {
-                        if *row > 0 {
-                            *row -= 1;
-                        }
-                    }
-                    Vertical::Down => {
-                        if *row + 1 < len {
-                            *row += 1;
-                        }
-                    }
+    fn move_vertical(&mut self, dir: Vertical, board: &BoardData) {
+        let len = board.day_len(self.focus);
+        if len == 0 {
+            return;
+        }
+        let row = &mut self.day_rows[self.focus];
+        match dir {
+            Vertical::Up => {
+                if *row > 0 {
+                    *row -= 1;
                 }
             }
-            FocusTarget::Backlog => {
-                let len = board.len_for(FocusTarget::Backlog);
-                if len == 0 {
-                    self.backlog_row = 0;
-                    return;
-                }
-                match dir {
-                    Vertical::Up => {
-                        if self.backlog_row > 0 {
-                            self.backlog_row -= 1;
-                        }
-                    }
-                    Vertical::Down => {
-                        if self.backlog_row + 1 < len {
-                            self.backlog_row += 1;
-                        }
-                    }
+            Vertical::Down => {
+                if *row + 1 < len {
+                    *row += 1;
                 }
             }
         }
         self.selection = None;
     }
 
-    fn horizontal_target(&self, dir: Horizontal, day_count: usize) -> FocusTarget {
-        match (self.focus, dir) {
-            (FocusTarget::Day(0), Horizontal::Left) => FocusTarget::Backlog,
-            (FocusTarget::Day(idx), Horizontal::Left) => FocusTarget::Day(idx - 1),
-            (FocusTarget::Day(idx), Horizontal::Right) if idx + 1 < day_count => {
-                FocusTarget::Day(idx + 1)
-            }
-            (FocusTarget::Day(_), Horizontal::Right) => FocusTarget::Backlog,
-            (FocusTarget::Backlog, Horizontal::Right) => FocusTarget::Day(0),
-            (FocusTarget::Backlog, Horizontal::Left) => {
-                FocusTarget::Day(day_count.saturating_sub(1))
-            }
-        }
-    }
-
-    fn row_for(&self, focus: FocusTarget, board: &BoardData) -> Option<usize> {
-        let len = board.len_for(focus);
+    fn row_for(&self, col: usize, board: &BoardData) -> Option<usize> {
+        let len = board.day_len(col);
         if len == 0 {
             return None;
         }
-        match focus {
-            FocusTarget::Day(idx) => self.day_rows.get(idx).copied().filter(|r| *r < len),
-            FocusTarget::Backlog => {
-                if self.backlog_row < len {
-                    Some(self.backlog_row)
-                } else {
-                    None
-                }
-            }
-        }
+        self.day_rows.get(col).copied().filter(|r| *r < len)
     }
 
-    fn line_style(&self, focus: FocusTarget, row: usize, board: &BoardData) -> Style {
-        if let Some(selection) = self.selection {
-            if selection.focus == focus && selection.row == Some(row) {
-                return Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD);
-            }
+    fn line_style(&self, col: usize, row: usize, board: &BoardData) -> Style {
+        if let Some(selection) = self.selection
+            && selection.column == col
+            && selection.row == Some(row)
+        {
+            return Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD);
         }
 
-        if self.focus == focus {
-            if let Some(current_row) = self.row_for(focus, board) {
-                if current_row == row {
-                    return Style::default().fg(Color::Yellow);
-                }
-            }
+        if self.focus == col
+            && let Some(current_row) = self.row_for(col, board)
+            && current_row == row
+        {
+            return Style::default().fg(Color::Yellow);
         }
 
         Style::default()
@@ -903,21 +1162,18 @@ impl CursorState {
 
     fn current_todo_id(&self, board: &BoardData) -> Option<Uuid> {
         let row = self.row_for(self.focus, board)?;
-        board.todo_id_at(self.focus, row)
+        board.day_todo_id_at(self.focus, row)
     }
 
     fn sync_after_refresh(&mut self, day_count: usize, board: &BoardData) {
         self.day_rows.resize(day_count, 0);
 
-        match self.focus {
-            FocusTarget::Day(idx) if idx >= day_count => {
-                self.focus = FocusTarget::Day(day_count.saturating_sub(1));
-            }
-            _ => {}
+        if self.focus >= day_count {
+            self.focus = day_count.saturating_sub(1);
         }
 
         for (idx, row) in self.day_rows.iter_mut().enumerate() {
-            let len = board.len_for(FocusTarget::Day(idx));
+            let len = board.day_len(idx);
             if len == 0 {
                 *row = 0;
             } else if *row >= len {
@@ -925,44 +1181,137 @@ impl CursorState {
             }
         }
 
-        let backlog_len = board.len_for(FocusTarget::Backlog);
-        if backlog_len == 0 {
-            self.backlog_row = 0;
-        } else if self.backlog_row >= backlog_len {
-            self.backlog_row = backlog_len - 1;
-        }
-
         if let Some(selection) = self.selection {
-            if let Some((focus, row)) = board.find_position(selection.id) {
+            if let Some((col, row)) = board.find_day_position(selection.id) {
                 self.selection = Some(Selection {
-                    focus,
+                    column: col,
                     row: Some(row),
                     ..selection
                 });
-                self.set_row_for(focus, row);
+                self.day_rows[col] = row;
             } else {
                 self.selection = None;
             }
         }
     }
 
-    fn set_row_for(&mut self, focus: FocusTarget, row: usize) {
-        match focus {
-            FocusTarget::Day(idx) => {
-                if idx < self.day_rows.len() {
-                    self.day_rows[idx] = row;
-                }
-            }
-            FocusTarget::Backlog => {
-                self.backlog_row = row;
-            }
+    fn set_focus_row(&mut self, col: usize, row: usize) {
+        self.focus = col;
+        if col < self.day_rows.len() {
+            self.day_rows[col] = row;
+        }
+        self.selection = None;
+    }
+}
+
+struct BacklogCursor {
+    column: usize,
+    rows: [usize; BACKLOG_COLUMNS],
+    selection: Option<BacklogSelection>,
+}
+
+impl BacklogCursor {
+    fn new() -> Self {
+        Self {
+            column: 0,
+            rows: [0; BACKLOG_COLUMNS],
+            selection: None,
         }
     }
 
-    fn set_focus_row(&mut self, focus: FocusTarget, row: usize) {
-        self.focus = focus;
-        self.set_row_for(focus, row);
+    fn move_horizontal(&mut self, dir: Horizontal) {
+        match dir {
+            Horizontal::Left => {
+                if self.column > 0 {
+                    self.column -= 1;
+                }
+            }
+            Horizontal::Right => {
+                if self.column + 1 < BACKLOG_COLUMNS {
+                    self.column += 1;
+                }
+            }
+        }
         self.selection = None;
+    }
+
+    fn move_vertical(&mut self, dir: Vertical, board: &BoardData) {
+        let len = board.backlog_col_len(self.column);
+        if len == 0 {
+            return;
+        }
+        let row = &mut self.rows[self.column];
+        match dir {
+            Vertical::Up => {
+                if *row > 0 {
+                    *row -= 1;
+                }
+            }
+            Vertical::Down => {
+                if *row + 1 < len {
+                    *row += 1;
+                }
+            }
+        }
+        self.selection = None;
+    }
+
+    fn row_for(&self, col: usize, board: &BoardData) -> Option<usize> {
+        let len = board.backlog_col_len(col);
+        if len == 0 {
+            return None;
+        }
+        let row = self.rows[col];
+        if row < len { Some(row) } else { None }
+    }
+
+    fn line_style(&self, col: usize, row: usize, board: &BoardData) -> Style {
+        if let Some(selection) = self.selection
+            && selection.column == col
+            && selection.row == Some(row)
+        {
+            return Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD);
+        }
+
+        if self.column == col
+            && let Some(current_row) = self.row_for(col, board)
+            && current_row == row
+        {
+            return Style::default().fg(Color::Yellow);
+        }
+
+        Style::default()
+    }
+
+    fn current_todo_id(&self, board: &BoardData) -> Option<Uuid> {
+        let row = self.row_for(self.column, board)?;
+        board.backlog_todo_id_at(self.column, row)
+    }
+
+    fn sync_after_refresh(&mut self, board: &BoardData) {
+        for col in 0..BACKLOG_COLUMNS {
+            let len = board.backlog_col_len(col);
+            if len == 0 {
+                self.rows[col] = 0;
+            } else if self.rows[col] >= len {
+                self.rows[col] = len - 1;
+            }
+        }
+
+        if let Some(selection) = self.selection {
+            if let Some((col, row)) = board.find_backlog_position(selection.id) {
+                self.selection = Some(BacklogSelection {
+                    column: col,
+                    row: Some(row),
+                    ..selection
+                });
+                self.rows[col] = row;
+            } else {
+                self.selection = None;
+            }
+        }
     }
 }
 
@@ -981,7 +1330,14 @@ enum Vertical {
 #[derive(Clone, Copy)]
 struct Selection {
     id: Uuid,
-    focus: FocusTarget,
+    column: usize,
+    row: Option<usize>,
+}
+
+#[derive(Clone, Copy)]
+struct BacklogSelection {
+    id: Uuid,
+    column: usize,
     row: Option<usize>,
 }
 

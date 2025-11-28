@@ -17,6 +17,7 @@ pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseCon
     if !path.exists() {
         OpenOptions::new()
             .create(true)
+            .truncate(true)
             .write(true)
             .open(path)
             .await
