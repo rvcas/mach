@@ -223,7 +223,7 @@ impl App {
                 let sep_idx = i / 2;
                 let adjacent_to_focus = sep_idx == focused || sep_idx + 1 == focused;
                 let style = if adjacent_to_focus {
-                    Style::default().fg(Color::Yellow)
+                    Style::default().fg(Color::Cyan)
                 } else {
                     Style::default().fg(Color::DarkGray)
                 };
@@ -238,7 +238,7 @@ impl App {
         let outer = Block::default()
             .title("Someday / Backlog")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Magenta));
+            .border_style(Style::default().fg(Color::Cyan));
 
         let inner = outer.inner(frame.area());
         frame.render_widget(outer, frame.area());
@@ -266,7 +266,7 @@ impl App {
                 let sep_idx = i / 2;
                 let adjacent_to_focus = sep_idx == focused || sep_idx + 1 == focused;
                 let style = if adjacent_to_focus {
-                    Style::default().fg(Color::Yellow)
+                    Style::default().fg(Color::Cyan)
                 } else {
                     Style::default().fg(Color::DarkGray)
                 };
@@ -291,6 +291,7 @@ impl App {
             area.width,
             highlight_row,
             |row| self.backlog_cursor.line_style(col_idx, row, &self.board),
+            |id| self.backlog_cursor.is_selected(id),
         );
 
         let para = Paragraph::new(lines);
@@ -303,7 +304,7 @@ impl App {
 
         let title_style = if focused {
             Style::default()
-                .fg(Color::Yellow)
+                .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
@@ -326,9 +327,13 @@ impl App {
         } else {
             None
         };
-        let lines = self.build_todo_lines_with_separators(items, area.width, highlight_row, |row| {
-            self.cursor.line_style(idx, row, &self.board)
-        });
+        let lines = self.build_todo_lines_with_separators(
+            items,
+            area.width,
+            highlight_row,
+            |row| self.cursor.line_style(idx, row, &self.board),
+            |id| self.cursor.is_selected(id),
+        );
 
         frame.render_widget(
             Paragraph::new(title_line).centered(),
@@ -347,15 +352,17 @@ impl App {
         frame.render_widget(body, content_area);
     }
 
-    fn build_todo_lines_with_separators<'a, F>(
+    fn build_todo_lines_with_separators<'a, F, S>(
         &self,
         items: &'a [TodoView],
         width: u16,
         highlight_row: Option<usize>,
         style_fn: F,
+        is_selected_fn: S,
     ) -> Vec<Line<'a>>
     where
         F: Fn(usize) -> Style,
+        S: Fn(Uuid) -> bool,
     {
         let separator = "-".repeat(width as usize);
 
@@ -371,8 +378,15 @@ impl App {
                 };
                 lines.push(Line::from(separator.clone()).style(sep_style));
             }
-            let mut line = item.to_line();
-            if highlight_row == Some(i) {
+            let is_selected = is_selected_fn(item.id);
+            let mut line = item.to_line_with_prefix(is_selected);
+            if is_selected {
+                line.style = line.style.patch(
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                );
+            } else if highlight_row == Some(i) {
                 line.style = line.style.patch(style_fn(i));
             }
             lines.push(line);
@@ -480,7 +494,7 @@ impl App {
         self.runtime.block_on(self.services.todos.move_to_scope(
             selection.id,
             ListScope::Day(target_date),
-            MovePlacement::Bottom,
+            MovePlacement::Top,
         ))?;
 
         if week_changed {
@@ -643,6 +657,12 @@ impl App {
             KeyCode::Char('x') if key.modifiers.is_empty() => {
                 self.mark_backlog_complete().ok();
             }
+            KeyCode::Char('t') if key.modifiers.is_empty() => {
+                self.move_backlog_to_day(0).ok();
+            }
+            KeyCode::Char('T') | KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                self.move_backlog_to_day(1).ok();
+            }
             KeyCode::Char('d') if key.modifiers.is_empty() => {
                 if self.pending_delete {
                     self.delete_backlog_current().ok();
@@ -656,6 +676,28 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn move_backlog_to_day(&mut self, days_from_today: i64) -> miette::Result<()> {
+        let Some(id) = self.backlog_current_target_id() else {
+            return Ok(());
+        };
+
+        if matches!(self.board.backlog_status_of(id), Some("done")) {
+            return Ok(());
+        }
+
+        let target_date = self.services.today() + ChronoDuration::days(days_from_today);
+
+        self.backlog_cursor.selection = None;
+        self.runtime.block_on(self.services.todos.move_to_scope(
+            id,
+            ListScope::Day(target_date),
+            MovePlacement::Top,
+        ))?;
+
+        self.refresh_board()?;
+        Ok(())
     }
 
     fn handle_backlog_horizontal(&mut self, dir: Horizontal) {
@@ -1087,8 +1129,13 @@ struct TodoView {
 }
 
 impl TodoView {
-    fn to_line(&self) -> Line<'_> {
-        let mut line = Line::from(self.title.clone());
+    fn to_line_with_prefix(&self, selected: bool) -> Line<'_> {
+        let text = if selected {
+            format!("› {}", self.title)
+        } else {
+            self.title.clone()
+        };
+        let mut line = Line::from(text);
         if self.status == "done" {
             line.style = Style::default().add_modifier(Modifier::CROSSED_OUT);
         }
@@ -1156,7 +1203,7 @@ impl CursorState {
             && selection.row == Some(row)
         {
             return Style::default()
-                .fg(Color::Green)
+                .fg(Color::Magenta)
                 .add_modifier(Modifier::BOLD);
         }
 
@@ -1168,6 +1215,10 @@ impl CursorState {
         }
 
         Style::default()
+    }
+
+    fn is_selected(&self, id: Uuid) -> bool {
+        self.selection.map(|s| s.id == id).unwrap_or(false)
     }
 
     fn current_todo_id(&self, board: &BoardData) -> Option<Uuid> {
@@ -1281,7 +1332,7 @@ impl BacklogCursor {
             && selection.row == Some(row)
         {
             return Style::default()
-                .fg(Color::Green)
+                .fg(Color::Magenta)
                 .add_modifier(Modifier::BOLD);
         }
 
@@ -1293,6 +1344,10 @@ impl BacklogCursor {
         }
 
         Style::default()
+    }
+
+    fn is_selected(&self, id: Uuid) -> bool {
+        self.selection.map(|s| s.id == id).unwrap_or(false)
     }
 
     fn current_todo_id(&self, board: &BoardData) -> Option<Uuid> {
