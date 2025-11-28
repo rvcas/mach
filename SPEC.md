@@ -68,6 +68,8 @@
   - `dd`: delete highlighted todo (prompt for confirmation if desired).
   - `x`: toggle completion status on the focused/selected todo.
   - `s`: move the focused/selected todo to Someday/backlog (pending items only).
+- **Settings**
+  - `gs`: open the settings modal; `m` sets week start to Monday, `s` sets it to Sunday, persisting immediately in the database. `Esc`/`Enter` closes the modal.
 - **Other hotkeys** (future): `/` to search, `a` to add inline, `?` help.
 
 ## Persistence & Sync

@@ -3,9 +3,9 @@ use std::path::Path;
 use miette::{Context, IntoDiagnostic};
 use sea_orm::{Database, DatabaseConnection};
 use tokio::fs;
-use turso::Builder;
+use tokio::fs::OpenOptions;
 
-/// Initialize the local Turso database file and return a SeaORM connection.
+/// Initialize the local SQLite database file and return a SeaORM connection.
 pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseConnection> {
     let path = path.as_ref();
 
@@ -13,12 +13,16 @@ pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseCon
 
     let path_string = path_to_string(path);
 
-    // Create (or open) the local Turso database file.
-    Builder::new_local(&path_string)
-        .build()
-        .await
-        .into_diagnostic()
-        .wrap_err("failed to initialize Turso database file")?;
+    // Ensure the database file exists so SQLite can open it.
+    if !path.exists() {
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(path)
+            .await
+            .into_diagnostic()
+            .wrap_err("failed to create sqlite db file")?;
+    }
 
     let url = sqlite_url(&path_string);
 

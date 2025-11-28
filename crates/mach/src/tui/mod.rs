@@ -16,7 +16,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::Line,
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 use tokio::runtime::Handle;
 use uuid::Uuid;
@@ -25,6 +25,7 @@ use crate::{
     entity::todo,
     service::{
         Services,
+        config::WeekStart,
         todo::{ListOptions, ListScope, MovePlacement, ReorderDirection},
     },
 };
@@ -47,6 +48,9 @@ struct App {
     state: WeekState,
     board: BoardData,
     cursor: CursorState,
+    week_pref: WeekStart,
+    ui_mode: UiMode,
+    pending_g: bool,
     pending_delete: bool,
     should_quit: bool,
 }
@@ -54,7 +58,8 @@ struct App {
 impl App {
     fn new(services: Services, runtime: Handle) -> Self {
         let today = services.today();
-        let state = WeekState::new(today);
+        let week_pref = services.week_start();
+        let state = WeekState::new(today, week_pref);
         let board = BoardData::new(state.columns.len());
         let mut cursor = CursorState::new(state.columns.len());
         if let Some(idx) = state.column_index(today) {
@@ -66,6 +71,9 @@ impl App {
             state,
             board,
             cursor,
+            week_pref,
+            ui_mode: UiMode::Board,
+            pending_g: false,
             pending_delete: false,
             should_quit: false,
         }
@@ -114,6 +122,19 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) {
+        if matches!(self.ui_mode, UiMode::Settings(_)) {
+            self.handle_settings_key(key);
+            return;
+        }
+
+        if self.pending_g {
+            self.pending_g = false;
+            if key.modifiers.is_empty() && matches!(key.code, KeyCode::Char('s')) {
+                self.open_settings();
+                return;
+            }
+        }
+
         if !matches!(key.code, KeyCode::Char('d')) {
             self.pending_delete = false;
         }
@@ -121,6 +142,9 @@ impl App {
         match key.code {
             KeyCode::Char('q') if key.modifiers.is_empty() => self.should_quit = true,
             KeyCode::Esc => self.should_quit = true,
+            KeyCode::Char('g') if key.modifiers.is_empty() => {
+                self.pending_g = true;
+            }
             KeyCode::Char('h') => self.handle_horizontal(Horizontal::Left),
             KeyCode::Char('l') => self.handle_horizontal(Horizontal::Right),
             KeyCode::Char('j') => self.handle_vertical(Vertical::Down),
@@ -165,6 +189,10 @@ impl App {
         }
 
         self.draw_backlog(frame, chunks[1]);
+
+        if let UiMode::Settings(ref settings) = self.ui_mode {
+            self.draw_settings(frame, settings);
+        }
     }
 
     fn draw_column(&self, frame: &mut Frame<'_>, idx: usize, area: Rect) {
@@ -417,6 +445,90 @@ impl App {
         }
         Ok(())
     }
+
+    fn open_settings(&mut self) {
+        let settings = SettingsState {
+            week_start: self.week_pref,
+        };
+        self.ui_mode = UiMode::Settings(settings);
+    }
+
+    fn handle_settings_key(&mut self, key: KeyEvent) {
+        if let UiMode::Settings(settings) = &mut self.ui_mode {
+            let mut apply: Option<WeekStart> = None;
+            let mut close = false;
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => close = true,
+                KeyCode::Char('m') => {
+                    let target = WeekStart::Monday;
+                    if settings.week_start != target {
+                        settings.week_start = target;
+                        apply = Some(target);
+                    }
+                }
+                KeyCode::Char('s') => {
+                    let target = WeekStart::Sunday;
+                    if settings.week_start != target {
+                        settings.week_start = target;
+                        apply = Some(target);
+                    }
+                }
+                _ => {}
+            }
+            let _ = settings;
+            if close {
+                self.ui_mode = UiMode::Board;
+            }
+            if let Some(new_pref) = apply {
+                self.apply_week_start(new_pref);
+            }
+        }
+    }
+
+    fn apply_week_start(&mut self, week_start: WeekStart) {
+        if week_start == self.week_pref {
+            return;
+        }
+
+        self.week_pref = week_start;
+
+        if let Err(err) = self
+            .runtime
+            .block_on(self.services.config.save_week_start(week_start))
+        {
+            eprintln!("failed to save week start preference: {err}");
+        }
+
+        self.state = WeekState::new(self.services.today(), week_start);
+        self.board = BoardData::new(self.state.columns.len());
+        self.cursor = CursorState::new(self.state.columns.len());
+        if let Some(idx) = self.state.column_index(self.services.today()) {
+            self.cursor.set_focus_row(FocusTarget::Day(idx), 0);
+        }
+
+        self.refresh_board().ok();
+    }
+
+    fn draw_settings(&self, frame: &mut Frame<'_>, settings: &SettingsState) {
+        let area = centered_rect(50, 25, frame.area());
+        let block = Block::default()
+            .title("Settings")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Magenta));
+
+        let week_text = match settings.week_start {
+            WeekStart::Sunday => "Week Start: Sunday",
+            WeekStart::Monday => "Week Start: Monday",
+        };
+        let instructions = vec![
+            Line::from(week_text),
+            Line::from("m: Monday, s: Sunday"),
+            Line::from("Esc/Enter: close"),
+        ];
+        let paragraph = Paragraph::new(instructions).block(block);
+        frame.render_widget(Clear, area);
+        frame.render_widget(paragraph, area);
+    }
 }
 
 struct WeekState {
@@ -425,8 +537,8 @@ struct WeekState {
 }
 
 impl WeekState {
-    fn new(today: NaiveDate) -> Self {
-        let week_start = start_of_week(today);
+    fn new(today: NaiveDate, preference: WeekStart) -> Self {
+        let week_start = start_of_week(today, preference);
         Self {
             week_start,
             columns: build_columns(week_start),
@@ -462,6 +574,16 @@ struct ColumnMeta {
     date: NaiveDate,
 }
 
+#[derive(Clone)]
+struct SettingsState {
+    week_start: WeekStart,
+}
+
+enum UiMode {
+    Board,
+    Settings(SettingsState),
+}
+
 fn build_columns(week_start: NaiveDate) -> Vec<ColumnMeta> {
     let mut cols = Vec::with_capacity(7);
     for offset in 0..7 {
@@ -489,9 +611,35 @@ fn weekday_label(day: chrono::Weekday) -> &'static str {
     }
 }
 
-fn start_of_week(date: NaiveDate) -> NaiveDate {
-    let weekday = date.weekday().number_from_monday() as i64 - 1;
-    date - ChronoDuration::days(weekday)
+fn start_of_week(date: NaiveDate, preference: WeekStart) -> NaiveDate {
+    let weekday = date.weekday();
+    let offset = match preference {
+        WeekStart::Sunday => weekday.num_days_from_sunday() as i64,
+        WeekStart::Monday => weekday.num_days_from_monday() as i64,
+    };
+    date - ChronoDuration::days(offset)
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+
+    let horizontal = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1]);
+
+    horizontal[1]
 }
 
 struct BoardData {

@@ -8,13 +8,18 @@ use chrono::{Local, NaiveDate};
 use directories::ProjectDirs;
 use miette::{Context, IntoDiagnostic};
 
-use self::{config::ConfigService, connection::init_database, todo::TodoService};
+use self::{
+    config::{ConfigService, WeekStart},
+    connection::init_database,
+    todo::TodoService,
+};
 
 #[derive(Clone)]
 pub struct Services {
     pub todos: TodoService,
     pub config: ConfigService,
     today: NaiveDate,
+    week_start_pref: WeekStart,
 }
 
 impl Services {
@@ -29,16 +34,22 @@ impl Services {
         let today = Local::now().date_naive();
 
         todos.rollover_to(today).await?;
+        let week_start = config.load_week_start().await?;
 
         Ok(Self {
             todos,
             config,
             today,
+            week_start_pref: week_start,
         })
     }
 
     pub fn today(&self) -> NaiveDate {
         self.today
+    }
+
+    pub fn week_start(&self) -> WeekStart {
+        self.week_start_pref
     }
 }
 

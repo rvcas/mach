@@ -1,6 +1,10 @@
 use crate::entity::config;
+use chrono::Utc;
 use miette::IntoDiagnostic;
-use sea_orm::{ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
+    sea_query::OnConflict,
+};
 use serde_json::json;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,16 +67,18 @@ impl ConfigService {
     }
 
     pub async fn save_week_start(&self, week_start: WeekStart) -> miette::Result<()> {
+        let now = Utc::now();
         let model = config::ActiveModel {
             key: Set("week_start".to_string()),
             value: Set(json!(week_start.as_str())),
-            ..Default::default()
+            created_at: Set(now),
+            updated_at: Set(now),
         };
 
         config::Entity::insert(model)
             .on_conflict(
-                sea_orm::sea_query::OnConflict::column(config::Column::Key)
-                    .update_column(config::Column::Value)
+                OnConflict::column(config::Column::Key)
+                    .update_columns([config::Column::Value, config::Column::UpdatedAt])
                     .to_owned(),
             )
             .exec(&self.db)
