@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
-import starlightLlmsTxt from 'starlight-llms-txt'
+import starlightLlmsTxt from "starlight-llms-txt";
 
 // https://astro.build/config
 export default defineConfig({
@@ -14,20 +14,23 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/withastro/starlight",
+          href: "https://github.com/rvcas/mach",
         },
       ],
       sidebar: [
         {
-          label: "Guides",
+          label: "Getting Started",
           items: [
-            // Each item here is one entry in the navigation menu.
-            { label: "Example Guide", slug: "guides/example" },
+            { label: "Installation", slug: "installation" },
+            { label: "Quick Start", slug: "quick-start" },
           ],
         },
         {
           label: "Reference",
-          autogenerate: { directory: "reference" },
+          items: [
+            { label: "Keyboard Shortcuts", slug: "reference/keyboard-shortcuts" },
+            { label: "How It Works", slug: "reference/how-it-works" },
+          ],
         },
       ],
     }),

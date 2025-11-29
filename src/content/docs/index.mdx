@@ -1,40 +1,46 @@
 ---
-title: Welcome to Starlight
-description: Get started building your docs site with Starlight.
-template: splash # Remove or comment out this line to display the site sidebar on this page.
+title: mach
+description: A terminal-based weekly planner inspired by Tweek.
+template: splash
 hero:
-  tagline: Congrats on setting up a new Starlight project!
-  image:
-    file: ../../assets/houston.webp
+  tagline: Plan your week with vim-style navigation, organize someday items in a backlog, and stay focused without leaving your terminal.
   actions:
-    - text: Example Guide
-      link: /guides/example/
+    - text: Get Started
+      link: /installation/
       icon: right-arrow
-    - text: Read the Starlight docs
-      link: https://starlight.astro.build
+    - text: View on GitHub
+      link: https://github.com/rvcas/mach
       icon: external
       variant: minimal
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
 
-## Next steps
+## Features
 
-<CardGrid stagger>
-  <Card title="Update content" icon="pencil">
-    Edit `src/content/docs/index.mdx` to see this page change.
+<CardGrid>
+  <Card title="Weekly View" icon="sun">
+    7-day columns showing your week at a glance. Navigate with `h/j/k/l`, drag
+    items between days.
   </Card>
-  <Card title="Change page layout" icon="document">
-    Delete `template: splash` in `src/content/docs/index.mdx` to display a
-    sidebar on this page.
+  <Card title="Backlog View" icon="list-format">
+    4-column organizer for "someday" items. Press `b` to toggle, organize ideas
+    without cluttering your week.
   </Card>
-  <Card title="Add new content" icon="add-document">
-    Add Markdown or MDX files to `src/content/docs` to create new pages.
+  <Card title="Vim Navigation" icon="rocket">
+    `h/j/k/l` to move, `Enter` to select and drag, `dd` to delete. Feels like
+    home for terminal users.
   </Card>
-  <Card title="Configure your site" icon="setting">
-    Edit your `sidebar` and other config in `astro.config.mjs`.
-  </Card>
-  <Card title="Read the docs" icon="open-book">
-    Learn more in [the Starlight Docs](https://starlight.astro.build/).
+  <Card title="Local-First" icon="laptop">
+    SQLite storage, no cloud, no account needed. Your data stays on your
+    machine.
   </Card>
 </CardGrid>
+
+## Quick Install
+
+```sh
+brew install rvcas/tap/mach
+```
+
+Or see all [installation options](/installation/).
