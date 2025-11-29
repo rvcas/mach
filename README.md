@@ -1,4 +1,4 @@
-# <img src="src/assets/logo.svg" width="28" height="28" alt="mach logo"> mach
+# <img src="src/assets/logo.svg" width="28" height="28" alt="mach logo" style="vertical-align: middle;"> mach
 
 A terminal-based weekly planner inspired by [Tweek](https://tweek.so). Plan your week with vim-style navigation, organize someday items in a backlog, and stay focused without leaving your terminal.
 
