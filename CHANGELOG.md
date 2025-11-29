@@ -1,3 +1,7 @@
+# Version 0.2.2 (2025-11-28)
+
+- Readme updates
+
 # Version 0.2.1 (2025-11-28)
 
 - Fix schema registry path causing "no such table" error on first run
