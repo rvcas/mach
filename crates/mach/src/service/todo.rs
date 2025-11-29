@@ -222,6 +222,39 @@ impl TodoService {
         active.update(&self.db).await.into_diagnostic()
     }
 
+    /// Get a todo by id.
+    pub async fn get(&self, id: Uuid) -> Result<todo::Model> {
+        self.load(id).await
+    }
+
+    /// Update the title of a todo.
+    pub async fn update_title(&self, id: Uuid, title: String) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+        let mut active: todo::ActiveModel = model.into();
+        active.title = Set(title);
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    /// Update the scheduled_for date of a todo.
+    pub async fn update_scheduled_for(
+        &self,
+        id: Uuid,
+        scheduled_for: Option<NaiveDate>,
+    ) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+        let mut active: todo::ActiveModel = model.into();
+        active.scheduled_for = Set(scheduled_for);
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    /// Update the notes of a todo.
+    pub async fn update_notes(&self, id: Uuid, notes: Option<String>) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+        let mut active: todo::ActiveModel = model.into();
+        active.notes = Set(notes);
+        active.update(&self.db).await.into_diagnostic()
+    }
+
     /// Reorder within a column/group (pending or done).
     pub async fn reorder(&self, id: Uuid, direction: ReorderDirection) -> Result<()> {
         let model = self.load(id).await?;

@@ -10,7 +10,7 @@ A terminal-based weekly planner inspired by [Tweek](https://tweek.so). Plan your
 - **Backlog view** — 4-column organizer for "someday" items
 - **Vim navigation** — `h/j/k/l` to move, `Enter` to select and drag
 - **Local-first** — SQLite storage, no cloud, no account needed
-- **High contrast** — Bright cyan/yellow/magenta palette for clear visibility
+- **Adaptive colors** — Uses terminal theme colors for universal compatibility
 
 ## Installation
 
@@ -61,10 +61,13 @@ mach list --done       # completed items
 | `j/k` | Move down/up within a column |
 | `[/]` | Previous/next week |
 | `Enter` | Select item (then `h/l` moves it, `j/k` reorders) |
+| `Space` | Open todo details (edit title, date, notes) |
 | `a` | Add new todo to focused column |
 | `x` | Toggle completion |
 | `dd` | Delete todo |
 | `s` | Send to backlog |
+| `t` | Move to today |
+| `T` | Move to tomorrow |
 | `b` | Open backlog view |
 | `gs` | Settings (week start day) |
 | `q/Esc` | Quit |
@@ -75,12 +78,23 @@ mach list --done       # completed items
 |-----|--------|
 | `h/j/k/l` | Navigate across 4 columns |
 | `Enter` | Select item (then `h/l` moves between columns) |
+| `Space` | Open todo details |
 | `a` | Add new todo |
 | `x` | Toggle completion |
 | `dd` | Delete |
 | `t` | Move to today |
 | `T` | Move to tomorrow |
 | `b/q/Esc` | Return to weekly view |
+
+### Todo Details
+
+| Key | Action |
+|-----|--------|
+| `j/k` | Navigate between fields |
+| `Enter` | Edit focused field / save edit |
+| `Ctrl+j` | New line (in notes) |
+| `x` | Toggle completion |
+| `Esc` | Close (or cancel edit) |
 
 ### Add Todo Popup
 

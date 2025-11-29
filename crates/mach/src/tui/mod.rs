@@ -156,6 +156,10 @@ impl App {
                 self.handle_add_todo_key(key);
                 return;
             }
+            UiMode::Detail(_) => {
+                self.handle_detail_key(key);
+                return;
+            }
             UiMode::Board => {}
         }
 
@@ -195,6 +199,15 @@ impl App {
             KeyCode::Char('s') if key.modifiers.is_empty() => {
                 self.move_to_backlog().ok();
             }
+            KeyCode::Char('t') if key.modifiers.is_empty() => {
+                self.move_to_today().ok();
+            }
+            KeyCode::Char('T') if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                self.move_to_tomorrow().ok();
+            }
+            KeyCode::Char(' ') if key.modifiers.is_empty() => {
+                self.open_detail_board();
+            }
             KeyCode::Enter => self.toggle_selection(),
             KeyCode::Char('d') if key.modifiers.is_empty() => {
                 if self.pending_delete {
@@ -225,6 +238,14 @@ impl App {
                     AddTarget::BacklogColumn(_) => self.draw_backlog_view(frame),
                 }
                 self.draw_add_todo(frame, state);
+            }
+            UiMode::Detail(state) => {
+                if state.from_backlog {
+                    self.draw_backlog_view(frame);
+                } else {
+                    self.draw_board(frame);
+                }
+                self.draw_detail(frame, state);
             }
         }
     }
@@ -711,6 +732,9 @@ impl App {
                     self.pending_delete = true;
                 }
             }
+            KeyCode::Char(' ') if key.modifiers.is_empty() => {
+                self.open_detail_backlog();
+            }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
             }
@@ -1049,6 +1073,316 @@ impl App {
             Line::from(format!("› {}_", state.input)).style(Style::default().fg(palette::ACTIVE));
         frame.render_widget(Paragraph::new(input_line), inner);
     }
+
+    fn open_detail_board(&mut self) {
+        let Some(id) = self.cursor.current_todo_id(&self.board) else {
+            return;
+        };
+        self.open_detail(id, false);
+    }
+
+    fn open_detail_backlog(&mut self) {
+        let Some(id) = self.backlog_cursor.current_todo_id(&self.board) else {
+            return;
+        };
+        self.open_detail(id, true);
+    }
+
+    fn open_detail(&mut self, id: Uuid, from_backlog: bool) {
+        let Ok(model) = self.runtime.block_on(self.services.todos.get(id)) else {
+            return;
+        };
+
+        self.ui_mode = UiMode::Detail(DetailState {
+            todo_id: model.id,
+            title: model.title,
+            date: model.scheduled_for,
+            status: model.status,
+            notes: model.notes.unwrap_or_default(),
+            field: DetailField::Title,
+            editing: None,
+            from_backlog,
+        });
+    }
+
+    fn handle_detail_key(&mut self, key: KeyEvent) {
+        let UiMode::Detail(ref mut state) = self.ui_mode else {
+            return;
+        };
+
+        if state.editing.is_some() {
+            self.handle_detail_edit_key(key);
+            return;
+        }
+
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                let from_backlog = state.from_backlog;
+                self.ui_mode = if from_backlog {
+                    UiMode::Backlog
+                } else {
+                    UiMode::Board
+                };
+                self.refresh_board().ok();
+                self.refresh_backlog().ok();
+            }
+            KeyCode::Char('j') => {
+                let UiMode::Detail(ref mut state) = self.ui_mode else {
+                    return;
+                };
+                state.field = state.field.next();
+            }
+            KeyCode::Char('k') => {
+                let UiMode::Detail(ref mut state) = self.ui_mode else {
+                    return;
+                };
+                state.field = state.field.prev();
+            }
+            KeyCode::Enter => {
+                let UiMode::Detail(ref mut state) = self.ui_mode else {
+                    return;
+                };
+                if state.field.is_editable() {
+                    state.editing = Some(state.field_value(state.field));
+                }
+            }
+            KeyCode::Char('x') => {
+                self.toggle_detail_status();
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_detail_edit_key(&mut self, key: KeyEvent) {
+        let UiMode::Detail(ref mut state) = self.ui_mode else {
+            return;
+        };
+
+        let Some(ref mut input) = state.editing else {
+            return;
+        };
+
+        let is_notes = state.field == DetailField::Notes;
+
+        match key.code {
+            KeyCode::Esc => {
+                self.finish_detail_edit(false);
+            }
+            KeyCode::Char('j') if is_notes && key.modifiers.contains(KeyModifiers::CONTROL) => {
+                input.push('\n');
+            }
+            KeyCode::Enter => {
+                self.finish_detail_edit(true);
+            }
+            KeyCode::Char(c) => {
+                input.push(c);
+            }
+            KeyCode::Backspace => {
+                input.pop();
+            }
+            _ => {}
+        }
+    }
+
+    fn finish_detail_edit(&mut self, save: bool) {
+        let UiMode::Detail(ref mut state) = self.ui_mode else {
+            return;
+        };
+
+        let Some(input) = state.editing.take() else {
+            return;
+        };
+
+        if !save {
+            return;
+        }
+
+        let id = state.todo_id;
+        let field = state.field;
+
+        match field {
+            DetailField::Title => {
+                if !input.trim().is_empty()
+                    && self
+                        .runtime
+                        .block_on(self.services.todos.update_title(id, input.trim().to_string()))
+                        .is_ok()
+                {
+                    let UiMode::Detail(ref mut state) = self.ui_mode else {
+                        return;
+                    };
+                    state.title = input.trim().to_string();
+                }
+            }
+            DetailField::Date => {
+                let new_date = if input.trim().eq_ignore_ascii_case("none")
+                    || input.trim().eq_ignore_ascii_case("someday")
+                    || input.trim().is_empty()
+                {
+                    Some(None)
+                } else {
+                    NaiveDate::parse_from_str(input.trim(), "%Y-%m-%d")
+                        .ok()
+                        .map(Some)
+                };
+
+                if let Some(date) = new_date
+                    && self
+                        .runtime
+                        .block_on(self.services.todos.update_scheduled_for(id, date))
+                        .is_ok()
+                {
+                    let UiMode::Detail(ref mut state) = self.ui_mode else {
+                        return;
+                    };
+                    state.date = date;
+                }
+            }
+            DetailField::Notes => {
+                let notes = if input.trim().is_empty() {
+                    None
+                } else {
+                    Some(input.clone())
+                };
+                if self
+                    .runtime
+                    .block_on(self.services.todos.update_notes(id, notes))
+                    .is_ok()
+                {
+                    let UiMode::Detail(ref mut state) = self.ui_mode else {
+                        return;
+                    };
+                    state.notes = input;
+                }
+            }
+            DetailField::Status => {}
+        }
+    }
+
+    fn toggle_detail_status(&mut self) {
+        let UiMode::Detail(ref mut state) = self.ui_mode else {
+            return;
+        };
+
+        let id = state.todo_id;
+        let today = self.services.today();
+
+        if state.status == "done" {
+            if let Ok(model) = self.runtime.block_on(self.services.todos.mark_pending(id)) {
+                state.status = model.status;
+            }
+        } else if let Ok(model) = self.runtime.block_on(self.services.todos.mark_done(id, today)) {
+            state.status = model.status;
+        }
+    }
+
+    fn draw_detail(&self, frame: &mut Frame<'_>, state: &DetailState) {
+        let area = centered_rect(70, 50, frame.area());
+        let block = Block::default()
+            .title("Todo")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(palette::FOCUS));
+
+        let inner = block.inner(area);
+        frame.render_widget(Clear, area);
+        frame.render_widget(block, area);
+
+        let fields = [
+            DetailField::Title,
+            DetailField::Date,
+            DetailField::Status,
+            DetailField::Notes,
+        ];
+
+        let mut lines: Vec<Line<'_>> = Vec::new();
+
+        for field in fields {
+            let is_focused = state.field == field;
+            let is_editing = is_focused && state.editing.is_some();
+
+            let label = field.label();
+            let value = if is_editing {
+                state.editing.as_ref().unwrap().clone()
+            } else {
+                state.field_value(field)
+            };
+
+            let style = if is_focused {
+                Style::default().fg(palette::ACTIVE)
+            } else {
+                Style::default().fg(palette::TEXT)
+            };
+
+            if field == DetailField::Notes {
+                lines.push(Line::from(""));
+                let prefix = if is_editing { "› " } else { "  " };
+                lines.push(Line::from(format!("{prefix}{label}:")).style(style));
+
+                if is_editing {
+                    let note_lines: Vec<&str> = value.split('\n').collect();
+                    for (i, line) in note_lines.iter().enumerate() {
+                        let cursor = if i == note_lines.len() - 1 { "_" } else { "" };
+                        lines.push(Line::from(format!("    {line}{cursor}")).style(style));
+                    }
+                } else if value.is_empty() {
+                    lines.push(Line::from("    (empty)").style(Style::default().fg(palette::TEXT_DIM)));
+                } else {
+                    for line in value.lines() {
+                        lines.push(Line::from(format!("    {line}")).style(style));
+                    }
+                }
+            } else {
+                let prefix = if is_focused { "› " } else { "  " };
+                let suffix = if is_editing { "_" } else { "" };
+                lines.push(
+                    Line::from(format!("{prefix}{label}: {value}{suffix}")).style(style),
+                );
+            }
+        }
+
+        lines.push(Line::from(""));
+        lines.push(
+            Line::from("[j/k] navigate  [Enter] edit  [x] toggle status  [Esc] close")
+                .style(Style::default().fg(palette::TEXT_DIM)),
+        );
+
+        let paragraph = Paragraph::new(lines);
+        frame.render_widget(paragraph, inner);
+    }
+
+    fn move_to_today(&mut self) -> miette::Result<()> {
+        let Some(id) = self.cursor.current_todo_id(&self.board) else {
+            return Ok(());
+        };
+
+        let today = self.services.today();
+        self.runtime.block_on(
+            self.services
+                .todos
+                .move_to_scope(id, crate::service::todo::ListScope::Day(today), MovePlacement::Top),
+        )?;
+
+        self.refresh_board()?;
+        Ok(())
+    }
+
+    fn move_to_tomorrow(&mut self) -> miette::Result<()> {
+        let Some(id) = self.cursor.current_todo_id(&self.board) else {
+            return Ok(());
+        };
+
+        let tomorrow = self.services.today() + ChronoDuration::days(1);
+        self.runtime.block_on(
+            self.services.todos.move_to_scope(
+                id,
+                crate::service::todo::ListScope::Day(tomorrow),
+                MovePlacement::Top,
+            ),
+        )?;
+
+        self.refresh_board()?;
+        Ok(())
+    }
 }
 
 struct WeekState {
@@ -1103,11 +1437,79 @@ enum AddTarget {
     BacklogColumn(usize),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DetailField {
+    Title,
+    Date,
+    Status,
+    Notes,
+}
+
+impl DetailField {
+    fn next(self) -> Self {
+        match self {
+            Self::Title => Self::Date,
+            Self::Date => Self::Status,
+            Self::Status => Self::Notes,
+            Self::Notes => Self::Notes,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            Self::Title => Self::Title,
+            Self::Date => Self::Title,
+            Self::Status => Self::Date,
+            Self::Notes => Self::Status,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Title => "Title",
+            Self::Date => "Date",
+            Self::Status => "Status",
+            Self::Notes => "Notes",
+        }
+    }
+
+    fn is_editable(self) -> bool {
+        !matches!(self, Self::Status)
+    }
+}
+
+#[derive(Clone)]
+struct DetailState {
+    todo_id: Uuid,
+    title: String,
+    date: Option<NaiveDate>,
+    status: String,
+    notes: String,
+    field: DetailField,
+    editing: Option<String>,
+    from_backlog: bool,
+}
+
+impl DetailState {
+    fn field_value(&self, field: DetailField) -> String {
+        match field {
+            DetailField::Title => self.title.clone(),
+            DetailField::Date => self
+                .date
+                .map(|d| d.format("%Y-%m-%d").to_string())
+                .unwrap_or_else(|| "none".to_string()),
+            DetailField::Status => self.status.clone(),
+            DetailField::Notes => self.notes.clone(),
+        }
+    }
+}
+
 enum UiMode {
     Board,
     Backlog,
     Settings(SettingsState),
     AddTodo(AddTodoState),
+    Detail(DetailState),
 }
 
 fn build_columns(week_start: NaiveDate) -> Vec<ColumnMeta> {
