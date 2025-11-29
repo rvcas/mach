@@ -9,6 +9,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: "mach",
+      favicon: "/favicon.svg",
       plugins: [starlightLlmsTxt({ projectName: "mach" })],
       social: [
         {
