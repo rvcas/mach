@@ -25,7 +25,7 @@ npm-scope = "@rvcas"
 # The npm package should have this name
 npm-package = "mach"
 # Path that installers should place binaries in
-install-path = "CARGO_HOME"
+install-path = ["$XDG_BIN_HOME", "~/.local/bin", "CARGO_HOME"]
 # Publish jobs to run in CI
 publish-jobs = ["homebrew", "npm"]
 # Whether to install an updater program
