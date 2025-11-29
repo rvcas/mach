@@ -6,7 +6,8 @@ members = ["crates/*"]
 version = "0.1.1"
 edition = "2024"
 description = "A CLI tool for managing todos with a weekly calendar"
-repository = "https://github.com/orbistry/mach"
+homepage = "https://machich.co"
+repository = "https://github.com/rvcas/mach"
 license = "MIT"
 
 [workspace.dependencies]
