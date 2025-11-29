@@ -36,7 +36,7 @@
 ## Coding Style & Naming Conventions
 
 - Four-space indentation, `snake_case` modules, `PascalCase` types,
- `SCREAMING_SNAKE_CASE` constants. Keep functions ~50 LOC and split
+  `SCREAMING_SNAKE_CASE` constants. Keep functions ~50 LOC and split
   widgets/services as they grow.
 - Keep SeaORM entity modules under a dedicated `entity/` tree (matching
   `sea-orm-codegen` output) and re-export them via `entity/mod.rs` so the

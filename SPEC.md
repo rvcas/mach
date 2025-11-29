@@ -38,11 +38,11 @@
 3. The list command shows today's tasks by default; `--some-day` flips to backlog.
 4. Daily rollover job:
    - Find todos where `status != "done"`, `scheduled_for < today`,
-    `scheduled_for.is_some()` → set `scheduled_for = today`.
+     `scheduled_for.is_some()` → set `scheduled_for = today`.
    - Maintain `order_index` by appending to bottom of today's list.
 5. Completion sets `status = "done"` and locks the todo to its current
-  `scheduled_for` date. Completed items remain visible in the TUI but always
-  sink below unfinished todos within the same column; CLI views require `--done`.
+   `scheduled_for` date. Completed items remain visible in the TUI but always
+   sink below unfinished todos within the same column; CLI views require `--done`.
 
 ## CLI Behaviors
 
