@@ -1342,7 +1342,11 @@ impl App {
 
         lines.push(Line::from(""));
         lines.push(
-            Line::from("[j/k] navigate  [Enter] edit  [x] toggle status  [Esc] close")
+            Line::from("[j/k] navigate  [Enter] edit/confirm  [x] toggle  [Esc] close")
+                .style(Style::default().fg(palette::TEXT_DIM)),
+        );
+        lines.push(
+            Line::from("[Ctrl+j] newline in notes")
                 .style(Style::default().fg(palette::TEXT_DIM)),
         );
 

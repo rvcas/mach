@@ -2,8 +2,6 @@
 
 A terminal-based weekly planner inspired by [Tweek](https://tweek.so). Plan your week with vim-style navigation, organize someday items in a backlog, and stay focused without leaving your terminal.
 
-![Rust](https://img.shields.io/badge/Rust-000000?style=flat&logo=rust&logoColor=white)
-
 ## Features
 
 - **Weekly view** — 7-day columns showing your week at a glance
@@ -91,7 +89,7 @@ mach list --done       # completed items
 | Key | Action |
 |-----|--------|
 | `j/k` | Navigate between fields |
-| `Enter` | Edit focused field / save edit |
+| `Enter` | Edit / confirm |
 | `Ctrl+j` | New line (in notes) |
 | `x` | Toggle completion |
 | `Esc` | Close (or cancel edit) |

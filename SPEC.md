@@ -68,9 +68,12 @@
   - Second `Enter` drops selection.
 - **Editing**:
   - `a`: open add todo popup for the focused column (new todo appears at top).
+  - `Space`: open todo details modal (edit title, date, notes).
   - `dd`: delete highlighted/selected todo.
   - `x`: toggle completion status on the focused/selected todo.
   - `s`: move the focused/selected todo to Someday/backlog (pending items only).
+  - `t`: move focused todo to today.
+  - `T` (shift): move focused todo to tomorrow.
 - **Views**:
   - `b`: open fullscreen backlog view.
   - `gs`: open settings modal.
@@ -86,6 +89,7 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
   - `j/k` adjusts `order_index` inside the current column.
 - **Editing**:
   - `a`: open add todo popup for the focused backlog column.
+  - `Space`: open todo details modal (edit title, date, notes).
   - `dd`: delete highlighted/selected todo.
   - `x`: toggle completion status.
   - `t`: move focused/selected todo to today.
@@ -98,6 +102,16 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
 - `Enter`: submit (adds to top of target column).
 - `Esc`: cancel.
 - `Backspace`: delete character.
+
+### Todo Details Modal
+
+- `j/k`: navigate between fields (Title, Date, Status, Notes).
+- `Enter`: edit focused field / confirm edit.
+- `Ctrl+j`: insert newline (in notes field).
+- `x`: toggle completion status.
+- `Esc`: close modal (or cancel current edit).
+- Date format: `YYYY-MM-DD`, or `none`/`someday` to clear.
+- Changes auto-save on confirm.
 
 ### Settings Modal
 
@@ -114,14 +128,15 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
 
 ### Visual Design
 
-- **Colorblind-friendly palette**:
-  - Cyan: column focus (separators, title underline).
+- **Terminal-adaptive palette** (uses ANSI colors that respect user's theme):
+  - LightBlue: column focus (separators, title underline).
   - Yellow: row focus (focused todo, adjacent row separators).
   - Magenta + Bold: selected todo (with `›` prefix).
-  - DarkGray: unfocused separators.
+  - DarkGray: unfocused separators, completed todos.
 - Vertical line separators (`│`) between columns.
 - Dashed line separators (`---`) between todos within a column.
 - Centered column titles with full-width underlines.
+- Works on both light and dark terminal themes.
 
 ### Future Hotkeys
 
@@ -164,7 +179,9 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
 - [x] Render backlog as separate fullscreen view with 4 columns.
 - [x] Add inline todo creation (`a` key).
 - [x] Add configuration loading/saving (week start toggle via TUI modal).
-- [x] Implement colorblind-friendly visual design.
+- [x] Implement terminal-adaptive visual design.
+- [x] Add todo details modal (`Space` key) for editing title, date, notes.
+- [x] Add `t`/`T` shortcuts in weekly view to move todos to today/tomorrow.
 - [ ] Tests: unit tests for services (rollover, ordering) + integration tests
       for CLI.
 
