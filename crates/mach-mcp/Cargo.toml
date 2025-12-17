@@ -1,0 +1,35 @@
+[package]
+name = "mach-mcp"
+version.workspace = true
+edition.workspace = true
+description = "MCP server for mach task management"
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mach-mcp"
+path = "src/main.rs"
+
+[dependencies]
+machich = { path = "../mach" }
+
+# MCP
+rmcp = { version = "0.10", features = ["transport-io", "server"] }
+tokio.workspace = true
+
+# CLI
+clap.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+miette.workspace = true
+
+# Date/Time
+chrono.workspace = true
+
+# UUID
+uuid.workspace = true
