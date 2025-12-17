@@ -152,7 +152,7 @@ impl CursorState {
     }
 
     pub fn ensure_visible(&mut self, col: usize, visible_rows: usize) {
-        if col >= self.scroll_offsets.len() {
+        if visible_rows == 0 || col >= self.scroll_offsets.len() {
             return;
         }
 
@@ -314,7 +314,7 @@ impl BacklogCursor {
     }
 
     pub fn ensure_visible(&mut self, col: usize, visible_rows: usize) {
-        if col >= BACKLOG_COLUMNS {
+        if visible_rows == 0 || col >= BACKLOG_COLUMNS {
             return;
         }
 
