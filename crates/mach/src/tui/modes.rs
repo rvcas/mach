@@ -31,6 +31,8 @@ pub enum AddTarget {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DetailField {
     Title,
+    Project,
+    Epic,
     Date,
     Status,
     Notes,
@@ -39,7 +41,9 @@ pub enum DetailField {
 impl DetailField {
     pub fn next(self) -> Self {
         match self {
-            Self::Title => Self::Date,
+            Self::Title => Self::Project,
+            Self::Project => Self::Epic,
+            Self::Epic => Self::Date,
             Self::Date => Self::Status,
             Self::Status => Self::Notes,
             Self::Notes => Self::Notes,
@@ -49,7 +53,9 @@ impl DetailField {
     pub fn prev(self) -> Self {
         match self {
             Self::Title => Self::Title,
-            Self::Date => Self::Title,
+            Self::Project => Self::Title,
+            Self::Epic => Self::Project,
+            Self::Date => Self::Epic,
             Self::Status => Self::Date,
             Self::Notes => Self::Status,
         }
@@ -58,6 +64,8 @@ impl DetailField {
     pub fn label(self) -> &'static str {
         match self {
             Self::Title => "Title",
+            Self::Project => "Project",
+            Self::Epic => "Epic",
             Self::Date => "Date",
             Self::Status => "Status",
             Self::Notes => "Notes",
@@ -65,7 +73,7 @@ impl DetailField {
     }
 
     pub fn is_editable(self) -> bool {
-        !matches!(self, Self::Status)
+        !matches!(self, Self::Status | Self::Epic)
     }
 }
 
@@ -73,18 +81,23 @@ impl DetailField {
 pub struct DetailState {
     pub todo_id: Uuid,
     pub title: String,
+    pub project: Option<String>,
+    pub epic_title: Option<String>,
     pub date: Option<NaiveDate>,
     pub status: String,
     pub notes: String,
     pub field: DetailField,
     pub editing: Option<String>,
     pub from_backlog: bool,
+    pub error: Option<String>,
 }
 
 impl DetailState {
     pub fn field_value(&self, field: DetailField) -> String {
         match field {
             DetailField::Title => self.title.clone(),
+            DetailField::Project => self.project.clone().unwrap_or_default(),
+            DetailField::Epic => self.epic_title.clone().unwrap_or_default(),
             DetailField::Date => self
                 .date
                 .map(|d| d.format("%Y-%m-%d").to_string())

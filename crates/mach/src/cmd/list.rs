@@ -1,6 +1,6 @@
 use crate::service::{
     Services,
-    todo::{ListOptions, ListScope},
+    todo::{ListOptions, ListScope, ProjectFilter},
 };
 
 /// List all todos in a table
@@ -13,6 +13,14 @@ pub struct Args {
     /// Include completed todos
     #[clap(short, long, default_value = "false")]
     done: bool,
+
+    /// Filter by project name
+    #[clap(short, long)]
+    project: Option<String>,
+
+    /// Only show todos without a project
+    #[clap(long, conflicts_with = "project")]
+    no_project: bool,
 }
 
 impl Args {
@@ -23,9 +31,18 @@ impl Args {
             ListScope::Day(services.today())
         };
 
+        let project = if self.no_project {
+            ProjectFilter::IsNull
+        } else if let Some(p) = self.project {
+            ProjectFilter::Equals(p)
+        } else {
+            ProjectFilter::Any
+        };
+
         let opts = ListOptions {
             scope,
             include_done: self.done,
+            project,
         };
 
         let todos = services.todos.list(opts).await?;

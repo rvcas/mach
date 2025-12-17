@@ -358,6 +358,8 @@ impl App {
 
         let fields = [
             DetailField::Title,
+            DetailField::Project,
+            DetailField::Epic,
             DetailField::Date,
             DetailField::Status,
             DetailField::Notes,
@@ -412,6 +414,11 @@ impl App {
 
                 lines.push(Line::from(format!("{prefix}{label}: {value}{suffix}")).style(style));
             }
+        }
+
+        if let Some(ref err) = state.error {
+            lines.push(Line::from(""));
+            lines.push(Line::from(format!("Error: {err}")).style(Style::default().fg(palette::ERROR)));
         }
 
         lines.push(Line::from(""));

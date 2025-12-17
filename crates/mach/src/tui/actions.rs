@@ -2,7 +2,7 @@ use chrono::Duration as ChronoDuration;
 use uuid::Uuid;
 
 use crate::service::config::WeekStart;
-use crate::service::todo::{ListOptions, ListScope, MovePlacement, ReorderDirection};
+use crate::service::todo::{ListOptions, ListScope, MovePlacement, ProjectFilter, ReorderDirection};
 
 use super::App;
 use super::cursor::{CursorState, Horizontal, Selection};
@@ -15,6 +15,7 @@ impl App {
             let opts = ListOptions {
                 scope: ListScope::Day(column.date),
                 include_done: true,
+                project: ProjectFilter::Any,
             };
 
             let todos = self.runtime.block_on(self.services.todos.list(opts))?;
@@ -37,6 +38,7 @@ impl App {
             .block_on(self.services.todos.list(ListOptions {
                 scope: ListScope::Backlog,
                 include_done: true,
+                project: ProjectFilter::Any,
             }))?;
 
         let mut columns: [Vec<TodoView>; BACKLOG_COLUMNS] = Default::default();
@@ -389,13 +391,13 @@ impl App {
         match target {
             AddTarget::Day(date) => {
                 self.runtime
-                    .block_on(self.services.todos.add(&title, Some(date), None))?;
+                    .block_on(self.services.todos.add(&title, Some(date), None, None, None))?;
                 self.refresh_board()?;
             }
             AddTarget::BacklogColumn(col) => {
                 let model = self
                     .runtime
-                    .block_on(self.services.todos.add(&title, None, None))?;
+                    .block_on(self.services.todos.add(&title, None, None, None, None))?;
                 self.runtime
                     .block_on(self.services.todos.set_backlog_column(model.id, col as i64))?;
                 self.refresh_backlog()?;
@@ -423,15 +425,24 @@ impl App {
             return;
         };
 
+        let epic_title = model.epic_id.and_then(|eid| {
+            self.runtime
+                .block_on(self.services.todos.get_epic_title(eid))
+                .ok()
+        });
+
         self.ui_mode = UiMode::Detail(DetailState {
             todo_id: model.id,
             title: model.title,
+            project: model.project,
+            epic_title,
             date: model.scheduled_for,
             status: model.status,
             notes: model.notes.unwrap_or_default(),
             field: DetailField::Title,
             editing: None,
             from_backlog,
+            error: None,
         });
     }
 

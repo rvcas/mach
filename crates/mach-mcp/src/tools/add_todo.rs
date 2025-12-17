@@ -111,7 +111,7 @@ Created todo with id, title, status, and scheduled date."#
 
         let model = self
             .service
-            .add(&title, scheduled_for, params.notes)
+            .add(&title, scheduled_for, params.notes, None, None)
             .await?;
 
         let location = match model.scheduled_for {

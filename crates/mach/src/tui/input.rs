@@ -363,6 +363,32 @@ impl App {
                     state.title = input.trim().to_string();
                 }
             }
+            DetailField::Project => {
+                let project = if input.trim().is_empty() {
+                    None
+                } else {
+                    Some(input.trim().to_string())
+                };
+
+                match self
+                    .runtime
+                    .block_on(self.services.todos.update_project(id, project.clone()))
+                {
+                    Ok(_) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.project = project;
+                        state.error = None;
+                    }
+                    Err(e) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.error = Some(e.to_string());
+                    }
+                }
+            }
             DetailField::Date => {
                 let new_date = if input.trim().eq_ignore_ascii_case("none")
                     || input.trim().eq_ignore_ascii_case("someday")
@@ -407,7 +433,7 @@ impl App {
                     state.notes = input;
                 }
             }
-            DetailField::Status => {}
+            DetailField::Epic | DetailField::Status => {}
         }
     }
 

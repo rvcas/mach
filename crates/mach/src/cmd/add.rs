@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::service::Services;
 
 /// Add a new todo
@@ -6,6 +8,14 @@ pub struct Args {
     /// Insert the todo into the backlog
     #[clap(short, long, default_value = "false")]
     some_day: bool,
+
+    /// Assign to a project
+    #[clap(short, long)]
+    project: Option<String>,
+
+    /// Link to an epic (parent todo UUID)
+    #[clap(short, long)]
+    epic: Option<Uuid>,
 
     /// Title of the todo (quoted or space separated)
     #[clap(required = true)]
@@ -22,7 +32,13 @@ impl Args {
 
         let todo = services
             .todos
-            .add(self.title(), scheduled_for, None)
+            .add(
+                self.title(),
+                scheduled_for,
+                None,
+                self.project,
+                self.epic,
+            )
             .await?;
 
         let date_label = scheduled_for

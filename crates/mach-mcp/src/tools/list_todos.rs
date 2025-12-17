@@ -1,6 +1,6 @@
 use crate::contracts::{CallToolResponse, Content};
 use chrono::{Local, NaiveDate};
-use machich::service::todo::{ListOptions, ListScope, TodoService};
+use machich::service::todo::{ListOptions, ListScope, ProjectFilter, TodoService};
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -133,6 +133,7 @@ Array of todos with id, title, status, scheduledFor, notes, orderIndex."#
         let opts = ListOptions {
             scope,
             include_done,
+            project: ProjectFilter::Any,
         };
 
         let models = self.service.list(opts).await?;

@@ -2,8 +2,8 @@ use crate::entity::todo;
 use chrono::NaiveDate;
 use miette::{IntoDiagnostic, Result, bail};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, Order, QueryFilter,
-    QueryOrder, Set, sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, Order,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, sea_query::Expr,
 };
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
@@ -17,11 +17,20 @@ pub enum ListScope {
     Backlog,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum ProjectFilter {
+    #[default]
+    Any,
+    Equals(String),
+    IsNull,
+}
+
 /// Pagination and filtering options for listing commands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListOptions {
     pub scope: ListScope,
     pub include_done: bool,
+    pub project: ProjectFilter,
 }
 
 impl ListOptions {
@@ -29,6 +38,7 @@ impl ListOptions {
         Self {
             scope: ListScope::Day(date),
             include_done: false,
+            project: ProjectFilter::Any,
         }
     }
 }
@@ -65,7 +75,13 @@ impl TodoService {
         title: impl Into<String>,
         scheduled_for: Option<NaiveDate>,
         notes: Option<String>,
+        project: Option<String>,
+        epic_id: Option<Uuid>,
     ) -> Result<todo::Model> {
+        let resolved_project = self
+            .resolve_project_with_epic(project, epic_id)
+            .await?;
+
         let order_index = self.next_top_order_index(scheduled_for).await?;
 
         let model = todo::ActiveModel {
@@ -75,11 +91,45 @@ impl TodoService {
             scheduled_for: Set(scheduled_for),
             order_index: Set(order_index),
             notes: Set(notes),
+            project: Set(resolved_project),
+            epic_id: Set(epic_id),
             metadata: Set(JsonValue::Null),
             ..Default::default()
         };
 
         model.insert(&self.db).await.into_diagnostic()
+    }
+
+    async fn resolve_project_with_epic(
+        &self,
+        project: Option<String>,
+        epic_id: Option<Uuid>,
+    ) -> Result<Option<String>> {
+        let Some(epic_id) = epic_id else {
+            return Ok(project);
+        };
+
+        let epic_project = todo::Entity::find_by_id(epic_id)
+            .select_only()
+            .column(todo::Column::Project)
+            .into_tuple::<(Option<String>,)>()
+            .one(&self.db)
+            .await
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("epic {epic_id} not found"))?
+            .0;
+
+        match (&project, &epic_project) {
+            (Some(p), Some(ep)) if p != ep => {
+                bail!(
+                    "project '{}' does not match epic's project '{}'",
+                    p,
+                    ep
+                );
+            }
+            (Some(_), _) => Ok(project),
+            (None, _) => Ok(epic_project),
+        }
     }
 
     /// List todos using the provided filters.
@@ -89,6 +139,12 @@ impl TodoService {
         if !opts.include_done {
             query = query.filter(todo::Column::Status.ne(STATUS_DONE));
         }
+
+        query = match opts.project {
+            ProjectFilter::Any => query,
+            ProjectFilter::Equals(ref p) => query.filter(todo::Column::Project.eq(p.clone())),
+            ProjectFilter::IsNull => query.filter(todo::Column::Project.is_null()),
+        };
 
         let done_first = Expr::cust("CASE WHEN status = 'done' THEN 1 ELSE 0 END");
 
@@ -102,6 +158,19 @@ impl TodoService {
 
     /// Delete a todo by id.
     pub async fn delete(&self, id: Uuid) -> Result<bool> {
+        let children_count = todo::Entity::find()
+            .filter(todo::Column::EpicId.eq(id))
+            .count(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        if children_count > 0 {
+            bail!(
+                "cannot delete todo: it is an epic with {} sub-todo(s)",
+                children_count
+            );
+        }
+
         let res = todo::Entity::delete_by_id(id)
             .exec(&self.db)
             .await
@@ -228,6 +297,11 @@ impl TodoService {
         self.load(id).await
     }
 
+    pub async fn get_epic_title(&self, epic_id: Uuid) -> Result<String> {
+        let epic = self.load(epic_id).await?;
+        Ok(epic.title)
+    }
+
     /// Update the title of a todo.
     pub async fn update_title(&self, id: Uuid, title: String) -> Result<todo::Model> {
         let model = self.load(id).await?;
@@ -253,6 +327,44 @@ impl TodoService {
         let model = self.load(id).await?;
         let mut active: todo::ActiveModel = model.into();
         active.notes = Set(notes);
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    pub async fn update_project(&self, id: Uuid, project: Option<String>) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+
+        if let Some(epic_id) = model.epic_id {
+            let epic = self.load(epic_id).await?;
+            if let (Some(p), Some(ep)) = (&project, &epic.project)
+                && p != ep
+            {
+                bail!(
+                    "project '{}' does not match epic's project '{}'",
+                    p,
+                    ep
+                );
+            }
+        }
+
+        let mut active: todo::ActiveModel = model.into();
+        active.project = Set(project);
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    pub async fn update_epic_id(&self, id: Uuid, epic_id: Option<Uuid>) -> Result<todo::Model> {
+        if epic_id == Some(id) {
+            bail!("a todo cannot be its own epic");
+        }
+
+        let model = self.load(id).await?;
+
+        let resolved_project = self
+            .resolve_project_with_epic(model.project.clone(), epic_id)
+            .await?;
+
+        let mut active: todo::ActiveModel = model.into();
+        active.epic_id = Set(epic_id);
+        active.project = Set(resolved_project);
         active.update(&self.db).await.into_diagnostic()
     }
 
@@ -403,4 +515,284 @@ enum StatusFilter {
 enum Extremum {
     Min,
     Max,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_orm::Database;
+
+    async fn test_db() -> DatabaseConnection {
+        let conn = Database::connect("sqlite::memory:")
+            .await
+            .expect("Failed to connect to in-memory SQLite");
+
+        conn.get_schema_registry("machich::entity::*")
+            .sync(&conn)
+            .await
+            .expect("Failed to sync schema");
+
+        conn
+    }
+
+    #[tokio::test]
+    async fn add_inherits_project_from_epic() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic = service
+            .add("epic: Auth", None, None, Some("myapp".into()), None)
+            .await
+            .unwrap();
+
+        let child = service
+            .add("Implement login", None, None, None, Some(epic.id))
+            .await
+            .unwrap();
+
+        assert_eq!(child.project, Some("myapp".into()));
+        assert_eq!(child.epic_id, Some(epic.id));
+    }
+
+    #[tokio::test]
+    async fn add_rejects_project_mismatch() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic = service
+            .add("epic: Auth", None, None, Some("myapp".into()), None)
+            .await
+            .unwrap();
+
+        let result = service
+            .add("Wrong project", None, None, Some("other".into()), Some(epic.id))
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("does not match"));
+    }
+
+    #[tokio::test]
+    async fn delete_blocked_for_epic_with_children() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic = service
+            .add("epic: Feature", None, None, None, None)
+            .await
+            .unwrap();
+
+        service
+            .add("Sub-task", None, None, None, Some(epic.id))
+            .await
+            .unwrap();
+
+        let result = service.delete(epic.id).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("epic with"));
+    }
+
+    #[tokio::test]
+    async fn delete_allowed_after_children_removed() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic = service
+            .add("epic: Feature", None, None, None, None)
+            .await
+            .unwrap();
+
+        let child = service
+            .add("Sub-task", None, None, None, Some(epic.id))
+            .await
+            .unwrap();
+
+        service.delete(child.id).await.unwrap();
+
+        let result = service.delete(epic.id).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn update_project_validates_against_epic() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic = service
+            .add("epic: Auth", None, None, Some("myapp".into()), None)
+            .await
+            .unwrap();
+
+        let child = service
+            .add("Task", None, None, None, Some(epic.id))
+            .await
+            .unwrap();
+
+        let result = service.update_project(child.id, Some("other".into())).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn list_filters_by_project() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        service
+            .add("Task A", None, None, Some("proj-a".into()), None)
+            .await
+            .unwrap();
+        service
+            .add("Task B", None, None, Some("proj-b".into()), None)
+            .await
+            .unwrap();
+        service.add("Task C", None, None, None, None).await.unwrap();
+
+        let opts = ListOptions {
+            scope: ListScope::Backlog,
+            include_done: false,
+            project: ProjectFilter::Equals("proj-a".into()),
+        };
+
+        let results = service.list(opts).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "Task A");
+    }
+
+    #[tokio::test]
+    async fn list_filters_null_project() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        service
+            .add("With project", None, None, Some("proj".into()), None)
+            .await
+            .unwrap();
+        service
+            .add("No project", None, None, None, None)
+            .await
+            .unwrap();
+
+        let opts = ListOptions {
+            scope: ListScope::Backlog,
+            include_done: false,
+            project: ProjectFilter::IsNull,
+        };
+
+        let results = service.list(opts).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "No project");
+    }
+
+    #[tokio::test]
+    async fn add_with_nonexistent_epic_id_fails() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let fake_id = Uuid::new_v4();
+        let result = service
+            .add("Task", None, None, None, Some(fake_id))
+            .await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn update_epic_id_to_none_removes_link() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic = service
+            .add("epic: Feature", None, None, Some("proj".into()), None)
+            .await
+            .unwrap();
+
+        let child = service
+            .add("Task", None, None, None, Some(epic.id))
+            .await
+            .unwrap();
+
+        assert_eq!(child.epic_id, Some(epic.id));
+        assert_eq!(child.project, Some("proj".into()));
+
+        let updated = service.update_epic_id(child.id, None).await.unwrap();
+
+        assert_eq!(updated.epic_id, None);
+        assert_eq!(updated.project, Some("proj".into()));
+    }
+
+    #[tokio::test]
+    async fn update_epic_id_to_valid_epic() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic1 = service
+            .add("epic: A", None, None, Some("proj".into()), None)
+            .await
+            .unwrap();
+
+        let epic2 = service
+            .add("epic: B", None, None, Some("proj".into()), None)
+            .await
+            .unwrap();
+
+        let task = service
+            .add("Task", None, None, Some("proj".into()), Some(epic1.id))
+            .await
+            .unwrap();
+
+        let updated = service.update_epic_id(task.id, Some(epic2.id)).await.unwrap();
+
+        assert_eq!(updated.epic_id, Some(epic2.id));
+    }
+
+    #[tokio::test]
+    async fn update_epic_id_with_nonexistent_epic_fails() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let task = service
+            .add("Task", None, None, None, None)
+            .await
+            .unwrap();
+
+        let fake_id = Uuid::new_v4();
+        let result = service.update_epic_id(task.id, Some(fake_id)).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn get_epic_title_returns_title() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic = service
+            .add("epic: My Feature", None, None, None, None)
+            .await
+            .unwrap();
+
+        let title = service.get_epic_title(epic.id).await.unwrap();
+        assert_eq!(title, "epic: My Feature");
+    }
+
+    #[tokio::test]
+    async fn update_epic_id_rejects_self_reference() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let task = service
+            .add("Task", None, None, None, None)
+            .await
+            .unwrap();
+
+        let result = service.update_epic_id(task.id, Some(task.id)).await;
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("own epic"));
+    }
 }

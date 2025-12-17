@@ -23,6 +23,8 @@ pub struct Model {
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     pub notes: Option<String>,
+    pub project: Option<String>,
+    pub epic_id: Option<Uuid>,
     #[sea_orm(column_type = "JsonBinary")]
     pub metadata: JsonValue,
 }
