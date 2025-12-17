@@ -16,34 +16,29 @@ use super::state::{BACKLOG_COLUMNS, TodoView};
 
 impl App {
     pub fn draw(&mut self, frame: &mut Frame<'_>) {
-        match &self.ui_mode {
+        let ui_mode = self.ui_mode.clone();
+
+        match ui_mode {
             UiMode::Board => self.draw_board(frame),
             UiMode::Backlog => self.draw_backlog_view(frame),
-            UiMode::Settings(settings) => {
+            UiMode::Settings(ref settings) => {
                 self.draw_board(frame);
-
-                let settings = settings.clone();
-
-                self.draw_settings(frame, &settings);
+                self.draw_settings(frame, settings);
             }
-            UiMode::AddTodo(state) => {
+            UiMode::AddTodo(ref state) => {
                 match state.target {
                     super::modes::AddTarget::Day(_) => self.draw_board(frame),
                     super::modes::AddTarget::BacklogColumn(_) => self.draw_backlog_view(frame),
                 }
-                let state = state.clone();
-                self.draw_add_todo(frame, &state);
+                self.draw_add_todo(frame, state);
             }
-            UiMode::Detail(state) => {
+            UiMode::Detail(ref state) => {
                 if state.from_backlog {
                     self.draw_backlog_view(frame);
                 } else {
                     self.draw_board(frame);
                 }
-
-                let state = state.clone();
-
-                self.draw_detail(frame, &state);
+                self.draw_detail(frame, state);
             }
         }
 
@@ -52,7 +47,7 @@ impl App {
         }
     }
 
-    pub fn draw_board(&self, frame: &mut Frame<'_>) {
+    pub fn draw_board(&mut self, frame: &mut Frame<'_>) {
         let day_count = self.state.columns.len();
         let mut constraints = Vec::with_capacity(day_count * 2 - 1);
 
@@ -95,7 +90,7 @@ impl App {
         }
     }
 
-    pub fn draw_backlog_view(&self, frame: &mut Frame<'_>) {
+    pub fn draw_backlog_view(&mut self, frame: &mut Frame<'_>) {
         let outer = Block::default()
             .title("Someday / Backlog")
             .borders(Borders::ALL)
@@ -145,9 +140,15 @@ impl App {
         }
     }
 
-    fn draw_backlog_column(&self, frame: &mut Frame<'_>, col_idx: usize, area: Rect) {
+    fn draw_backlog_column(&mut self, frame: &mut Frame<'_>, col_idx: usize, area: Rect) {
         let focused = self.backlog_cursor.column == col_idx;
         let items = &self.board.backlog_columns[col_idx];
+
+        let visible_rows = (area.height as usize).div_ceil(2);
+        if focused {
+            self.backlog_cursor.ensure_visible(col_idx, visible_rows);
+        }
+        let scroll_offset = self.backlog_cursor.scroll_offset(col_idx);
 
         let highlight_row = if focused {
             self.backlog_cursor.row_for(col_idx, &self.board)
@@ -159,6 +160,8 @@ impl App {
             items,
             area.width,
             highlight_row,
+            scroll_offset,
+            visible_rows,
             |row| self.backlog_cursor.line_style(col_idx, row, &self.board),
             |id| self.backlog_cursor.is_selected(id),
         );
@@ -168,7 +171,7 @@ impl App {
         frame.render_widget(para, area);
     }
 
-    fn draw_day_column(&self, frame: &mut Frame<'_>, idx: usize, area: Rect) {
+    fn draw_day_column(&mut self, frame: &mut Frame<'_>, idx: usize, area: Rect) {
         let column = &self.state.columns[idx];
         let focused = self.cursor.focus == idx;
 
@@ -198,6 +201,12 @@ impl App {
             .map(|d| d.as_slice())
             .unwrap_or(&[]);
 
+        let visible_rows = (content_area.height as usize).div_ceil(2);
+        if focused {
+            self.cursor.ensure_visible(idx, visible_rows);
+        }
+        let scroll_offset = self.cursor.scroll_offset(idx);
+
         let highlight_row = if focused {
             self.cursor.row_for(idx, &self.board)
         } else {
@@ -208,6 +217,8 @@ impl App {
             items,
             area.width,
             highlight_row,
+            scroll_offset,
+            visible_rows,
             |row| self.cursor.line_style(idx, row, &self.board),
             |id| self.cursor.is_selected(id),
         );
@@ -231,11 +242,14 @@ impl App {
         frame.render_widget(body, content_area);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_todo_lines_with_separators<'a, F, S>(
         &self,
         items: &'a [TodoView],
         width: u16,
         highlight_row: Option<usize>,
+        scroll_offset: usize,
+        visible_rows: usize,
         style_fn: F,
         is_selected_fn: S,
     ) -> Vec<Line<'a>>
@@ -245,10 +259,15 @@ impl App {
     {
         let separator = "-".repeat(width as usize);
 
-        let mut lines = Vec::with_capacity(items.len() * 2);
+        let end_idx = (scroll_offset + visible_rows).min(items.len());
+        let visible_items = &items[scroll_offset..end_idx];
 
-        for (i, item) in items.iter().enumerate() {
-            if i > 0 {
+        let mut lines = Vec::with_capacity(visible_items.len() * 2);
+
+        for (vi, item) in visible_items.iter().enumerate() {
+            let i = scroll_offset + vi;
+
+            if vi > 0 {
                 let adjacent_to_focus = highlight_row == Some(i - 1) || highlight_row == Some(i);
 
                 let sep_style = if adjacent_to_focus {

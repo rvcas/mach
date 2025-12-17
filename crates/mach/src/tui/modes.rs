@@ -3,6 +3,7 @@ use uuid::Uuid;
 
 use crate::service::config::WeekStart;
 
+#[derive(Clone)]
 pub enum UiMode {
     Board,
     Backlog,

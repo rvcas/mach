@@ -346,21 +346,31 @@ impl App {
 
         match field {
             DetailField::Title => {
-                if !input.trim().is_empty()
-                    && self
-                        .runtime
-                        .block_on(
-                            self.services
-                                .todos
-                                .update_title(id, input.trim().to_string()),
-                        )
-                        .is_ok()
-                {
+                if input.trim().is_empty() {
                     let UiMode::Detail(ref mut state) = self.ui_mode else {
                         return;
                     };
+                    state.error = Some("title cannot be empty".to_string());
+                    return;
+                }
 
-                    state.title = input.trim().to_string();
+                match self
+                    .runtime
+                    .block_on(self.services.todos.update_title(id, input.trim().to_string()))
+                {
+                    Ok(_) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.title = input.trim().to_string();
+                        state.error = None;
+                    }
+                    Err(e) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.error = Some(e.to_string());
+                    }
                 }
             }
             DetailField::Project => {
@@ -401,17 +411,31 @@ impl App {
                         .map(Some)
                 };
 
-                if let Some(date) = new_date
-                    && self
-                        .runtime
-                        .block_on(self.services.todos.update_scheduled_for(id, date))
-                        .is_ok()
-                {
+                let Some(date) = new_date else {
                     let UiMode::Detail(ref mut state) = self.ui_mode else {
                         return;
                     };
+                    state.error = Some("invalid date format (use YYYY-MM-DD or 'none')".to_string());
+                    return;
+                };
 
-                    state.date = date;
+                match self
+                    .runtime
+                    .block_on(self.services.todos.update_scheduled_for(id, date))
+                {
+                    Ok(_) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.date = date;
+                        state.error = None;
+                    }
+                    Err(e) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.error = Some(e.to_string());
+                    }
                 }
             }
             DetailField::Notes => {
@@ -421,16 +445,23 @@ impl App {
                     Some(input.clone())
                 };
 
-                if self
+                match self
                     .runtime
                     .block_on(self.services.todos.update_notes(id, notes))
-                    .is_ok()
                 {
-                    let UiMode::Detail(ref mut state) = self.ui_mode else {
-                        return;
-                    };
-
-                    state.notes = input;
+                    Ok(_) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.notes = input;
+                        state.error = None;
+                    }
+                    Err(e) => {
+                        let UiMode::Detail(ref mut state) = self.ui_mode else {
+                            return;
+                        };
+                        state.error = Some(e.to_string());
+                    }
                 }
             }
             DetailField::Epic | DetailField::Status => {}
