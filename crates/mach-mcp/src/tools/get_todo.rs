@@ -1,4 +1,4 @@
-use crate::contracts::{CallToolResponse, Content};
+use super::traits::McpTool;
 use machich::service::todo::TodoService;
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,9 @@ pub struct GetTodoResult {
     pub notes: Option<String>,
     pub order_index: i64,
     pub backlog_column: i64,
+    pub project: Option<String>,
+    pub epic_id: Option<String>,
+    pub epic_title: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -55,16 +58,8 @@ impl GetTodoTool {
 - `id` (required): UUID of the todo
 
 ## Returns
-Full todo details including id, title, status, scheduledFor, notes, orderIndex, backlogColumn, createdAt, updatedAt."#
+Full todo details including id, title, status, scheduledFor, notes, orderIndex, backlogColumn, project, epicId, epicTitle, createdAt, updatedAt."#
             .to_string()
-    }
-
-    pub async fn call(&self, params: GetTodoParams) -> Result<CallToolResponse> {
-        let result = self.execute(params).await?;
-        let json = serde_json::to_string(&result).into_diagnostic()?;
-        Ok(CallToolResponse {
-            content: vec![Content::text(json)],
-        })
     }
 
     pub async fn execute(&self, params: GetTodoParams) -> Result<GetTodoResult> {
@@ -73,6 +68,12 @@ Full todo details including id, title, status, scheduledFor, notes, orderIndex, 
             .map_err(|_| miette::miette!("invalid UUID format"))?;
 
         let model = self.service.get(id).await?;
+
+        let epic_title = if let Some(eid) = model.epic_id {
+            self.service.get_epic_title(eid).await.ok()
+        } else {
+            None
+        };
 
         Ok(GetTodoResult {
             id: model.id.to_string(),
@@ -84,8 +85,32 @@ Full todo details including id, title, status, scheduledFor, notes, orderIndex, 
             notes: model.notes,
             order_index: model.order_index,
             backlog_column: model.backlog_column,
+            project: model.project,
+            epic_id: model.epic_id.map(|u| u.to_string()),
+            epic_title,
             created_at: model.created_at.to_rfc3339(),
             updated_at: model.updated_at.to_rfc3339(),
         })
+    }
+}
+
+impl McpTool for GetTodoTool {
+    type Params = GetTodoParams;
+    type Result = GetTodoResult;
+
+    fn name() -> &'static str {
+        "get_todo"
+    }
+
+    fn schema() -> Value {
+        Self::schema()
+    }
+
+    fn description() -> String {
+        Self::description()
+    }
+
+    async fn run(&self, params: Self::Params) -> Result<Self::Result> {
+        self.execute(params).await
     }
 }

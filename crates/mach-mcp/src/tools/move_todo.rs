@@ -1,6 +1,7 @@
-use crate::contracts::{CallToolResponse, Content};
-use chrono::{Local, NaiveDate};
-use machich::service::todo::{ListScope, MovePlacement, TodoService};
+use super::traits::McpTool;
+use super::util::parse_scope;
+use chrono::Local;
+use machich::service::todo::{MovePlacement, TodoService};
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -23,6 +24,9 @@ pub struct MoveTodoResult {
     pub title: String,
     pub status: String,
     pub scheduled_for: Option<String>,
+    pub project: Option<String>,
+    pub epic_id: Option<String>,
+    pub epic_title: Option<String>,
     pub message: String,
 }
 
@@ -80,14 +84,6 @@ impl MoveTodoTool {
             .to_string()
     }
 
-    pub async fn call(&self, params: MoveTodoParams) -> Result<CallToolResponse> {
-        let result = self.execute(params).await?;
-        let json = serde_json::to_string(&result).into_diagnostic()?;
-        Ok(CallToolResponse {
-            content: vec![Content::text(json)],
-        })
-    }
-
     pub async fn execute(&self, params: MoveTodoParams) -> Result<MoveTodoResult> {
         let id = Uuid::parse_str(&params.id)
             .into_diagnostic()
@@ -105,6 +101,12 @@ impl MoveTodoTool {
             None => "backlog".to_string(),
         };
 
+        let epic_title = if let Some(eid) = model.epic_id {
+            self.service.get_epic_title(eid).await.ok()
+        } else {
+            None
+        };
+
         Ok(MoveTodoResult {
             id: model.id.to_string(),
             title: model.title,
@@ -112,23 +114,11 @@ impl MoveTodoTool {
             scheduled_for: model
                 .scheduled_for
                 .map(|d| d.format("%Y-%m-%d").to_string()),
+            project: model.project,
+            epic_id: model.epic_id.map(|u| u.to_string()),
+            epic_title,
             message: format!("Todo moved to {}", destination),
         })
-    }
-}
-
-fn parse_scope(s: &str, today: NaiveDate) -> Result<ListScope> {
-    match s.trim().to_lowercase().as_str() {
-        "today" => Ok(ListScope::Day(today)),
-        "backlog" | "someday" => Ok(ListScope::Backlog),
-        date_str => {
-            let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                .into_diagnostic()
-                .map_err(|_| {
-                    miette::miette!("invalid scope, expected 'today', 'backlog', or YYYY-MM-DD")
-                })?;
-            Ok(ListScope::Day(date))
-        }
     }
 }
 
@@ -136,5 +126,26 @@ fn parse_placement(s: Option<&str>) -> MovePlacement {
     match s.map(|s| s.trim().to_lowercase()).as_deref() {
         Some("bottom") => MovePlacement::Bottom,
         _ => MovePlacement::Top,
+    }
+}
+
+impl McpTool for MoveTodoTool {
+    type Params = MoveTodoParams;
+    type Result = MoveTodoResult;
+
+    fn name() -> &'static str {
+        "move_todo"
+    }
+
+    fn schema() -> Value {
+        Self::schema()
+    }
+
+    fn description() -> String {
+        Self::description()
+    }
+
+    async fn run(&self, params: Self::Params) -> Result<Self::Result> {
+        self.execute(params).await
     }
 }

@@ -1,9 +1,9 @@
 use crate::contracts::ToolDescription;
 use crate::tools::{
     AddTodoTool, DeleteTodoTool, GetTodoTool, ListTodosTool, MarkDoneTool, MarkPendingTool,
-    MoveTodoTool, UpdateTodoTool,
+    McpTool, MoveTodoTool, UpdateTodoTool,
 };
-use miette::Result;
+use machich::service::error::TodoError;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestMethod, CallToolRequestParam, CallToolResult, ErrorData, InitializeResult,
@@ -11,19 +11,9 @@ use rmcp::model::{
 };
 use rmcp::service::RequestContext;
 use rmcp::{RoleServer, model::Implementation};
-use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::future::Future;
 use std::sync::Arc;
-
-use crate::tools::add_todo::AddTodoParams;
-use crate::tools::delete_todo::DeleteTodoParams;
-use crate::tools::get_todo::GetTodoParams;
-use crate::tools::list_todos::ListTodosParams;
-use crate::tools::mark_done::MarkDoneParams;
-use crate::tools::mark_pending::MarkPendingParams;
-use crate::tools::move_todo::MoveTodoParams;
-use crate::tools::update_todo::UpdateTodoParams;
 
 #[derive(Clone)]
 pub struct McpOptions {
@@ -96,131 +86,66 @@ impl ServerHandler for MachMcpHandler {
         &self,
         request: CallToolRequestParam,
         _context: RequestContext<RoleServer>,
-    ) -> impl Future<Output = Result<CallToolResult, ErrorData>> + Send + '_ {
+    ) -> impl Future<Output = miette::Result<CallToolResult, ErrorData>> + Send + '_ {
         async move {
+            let args = request.arguments.clone();
             match request.name.as_ref() {
-                "add_todo" => {
-                    let params: AddTodoParams =
-                        parse_arguments(request.arguments.clone(), "add_todo")?;
-                    let result = self
-                        .options
-                        .add_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
-                "list_todos" => {
-                    let params: ListTodosParams =
-                        parse_arguments(request.arguments.clone(), "list_todos")?;
-                    let result = self
-                        .options
-                        .list_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
-                "get_todo" => {
-                    let params: GetTodoParams =
-                        parse_arguments(request.arguments.clone(), "get_todo")?;
-                    let result = self
-                        .options
-                        .get_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
-                "update_todo" => {
-                    let params: UpdateTodoParams =
-                        parse_arguments(request.arguments.clone(), "update_todo")?;
-                    let result = self
-                        .options
-                        .update_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
-                "delete_todo" => {
-                    let params: DeleteTodoParams =
-                        parse_arguments(request.arguments.clone(), "delete_todo")?;
-                    let result = self
-                        .options
-                        .delete_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
-                "mark_done" => {
-                    let params: MarkDoneParams =
-                        parse_arguments(request.arguments.clone(), "mark_done")?;
-                    let result = self
-                        .options
-                        .mark_done_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
-                "mark_pending" => {
-                    let params: MarkPendingParams =
-                        parse_arguments(request.arguments.clone(), "mark_pending")?;
-                    let result = self
-                        .options
-                        .mark_pending_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
-                "move_todo" => {
-                    let params: MoveTodoParams =
-                        parse_arguments(request.arguments.clone(), "move_todo")?;
-                    let result = self
-                        .options
-                        .move_tool
-                        .execute(params)
-                        .await
-                        .map_err(map_miette)?;
-                    let value = serde_json::to_value(&result)
-                        .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
-                    Ok(CallToolResult::structured(value))
-                }
+                "add_todo" => dispatch_tool(&*self.options.add_tool, args).await,
+                "list_todos" => dispatch_tool(&*self.options.list_tool, args).await,
+                "get_todo" => dispatch_tool(&*self.options.get_tool, args).await,
+                "update_todo" => dispatch_tool(&*self.options.update_tool, args).await,
+                "delete_todo" => dispatch_tool(&*self.options.delete_tool, args).await,
+                "mark_done" => dispatch_tool(&*self.options.mark_done_tool, args).await,
+                "mark_pending" => dispatch_tool(&*self.options.mark_pending_tool, args).await,
+                "move_todo" => dispatch_tool(&*self.options.move_tool, args).await,
                 _ => Err(ErrorData::method_not_found::<CallToolRequestMethod>()),
             }
         }
     }
 }
 
-fn parse_arguments<T: DeserializeOwned>(
+async fn dispatch_tool<T: McpTool>(
+    tool: &T,
     args: Option<JsonObject>,
-    name: &str,
-) -> Result<T, ErrorData> {
+) -> Result<CallToolResult, ErrorData> {
     let value = Value::Object(args.unwrap_or_else(Map::new));
-    serde_json::from_value(value).map_err(|err| {
-        ErrorData::invalid_params(format!("invalid parameters for {name}: {err}"), None)
-    })
+    let params: T::Params = serde_json::from_value(value).map_err(|err| {
+        ErrorData::invalid_params(format!("invalid parameters for {}: {err}", T::name()), None)
+    })?;
+    let result = tool.run(params).await.map_err(map_miette)?;
+    let value =
+        serde_json::to_value(&result).map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+    Ok(CallToolResult::structured(value))
 }
 
+/// Maps miette errors to MCP error codes using typed error classification.
+///
+/// If the error is a `TodoError`, uses `is_client_error()` for robust classification.
+/// Falls back to string heuristics for other error types.
 fn map_miette(error: miette::Error) -> ErrorData {
-    ErrorData::internal_error(error.to_string(), None)
+    let msg = error.to_string();
+
+    // Try typed classification first via TodoError
+    if let Some(todo_error) = error.downcast_ref::<TodoError>() {
+        return if todo_error.is_client_error() {
+            ErrorData::invalid_params(msg, None)
+        } else {
+            ErrorData::internal_error(msg, None)
+        };
+    }
+
+    // Fallback: string heuristics for non-TodoError types
+    let lower = msg.to_lowercase();
+    let is_invalid_params = lower.contains("not found")
+        || lower.contains("invalid uuid")
+        || lower.contains("does not match")
+        || lower.contains("cannot");
+
+    if is_invalid_params {
+        ErrorData::invalid_params(msg, None)
+    } else {
+        ErrorData::internal_error(msg, None)
+    }
 }
 
 fn tool_description_to_rmcp(desc: &ToolDescription) -> rmcp::model::Tool {

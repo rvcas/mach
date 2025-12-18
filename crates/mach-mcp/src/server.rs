@@ -10,31 +10,37 @@ use rmcp::service::serve_server;
 use rmcp::transport::stdio;
 use std::sync::Arc;
 
-const INSTRUCTIONS: &str = r#"**Mach Task Manager MCP Server** - Manage todos across projects.
+const INSTRUCTIONS: &str = r#"**Mach Task Manager MCP Server** - Manage todos with projects and epics.
 
 ## Available Tools
 
 | Tool | Purpose |
 |------|---------|
-| `add_todo` | Create a new todo (with optional project tag) |
-| `list_todos` | List todos by scope (today/backlog/date) with optional project filter |
+| `add_todo` | Create a new todo (with optional project/epicId) |
+| `list_todos` | List todos by scope with project/epic filtering |
 | `get_todo` | Get full details of a todo |
-| `update_todo` | Update title, date, or notes |
+| `update_todo` | Update title, date, notes, project, or epicId |
 | `delete_todo` | Permanently delete a todo |
 | `mark_done` | Mark a todo as completed |
 | `mark_pending` | Revert a completed todo to pending |
 | `move_todo` | Move a todo to a different day/backlog |
 
-## Project Filtering
-- Use the `project` parameter in `add_todo` to tag todos with `[project]` prefix
-- Use the `project` parameter in `list_todos` to filter by project
-- Or use the `prefix` parameter for custom filtering
+## Projects & Epics
+- `project`: A string tag for grouping todos (e.g., "my-app")
+- `epicId`: UUID of a parent todo that serves as an epic
+- Todos can have both a project and an epic
+- Child todos inherit project from their epic if not specified
+
+## Filtering
+- `project`: Filter by exact project value
+- `noProject`: Filter to todos with no project set
+- `epicId`: Filter to sub-tasks of a specific epic
 
 ## Workflow
-1. Use `list_todos` with optional project filter
-2. Use `add_todo` with project param to create tagged todos
-3. Use `mark_done` when completing tasks
-4. Use `move_todo` to reschedule tasks
+1. Create epics as regular todos (use descriptive titles/notes)
+2. Create sub-tasks with `epicId` pointing to the epic
+3. Use `list_todos` with `epicId` to see all sub-tasks
+4. **Important**: Do NOT auto-close epics - let users decide when done
 "#;
 
 pub struct MachMcpServer {

@@ -18,21 +18,21 @@ impl App {
     pub fn draw(&mut self, frame: &mut Frame<'_>) {
         let ui_mode = self.ui_mode.clone();
 
-        match ui_mode {
+        match &ui_mode {
             UiMode::Board => self.draw_board(frame),
             UiMode::Backlog => self.draw_backlog_view(frame),
-            UiMode::Settings(ref settings) => {
+            UiMode::Settings(settings) => {
                 self.draw_board(frame);
                 self.draw_settings(frame, settings);
             }
-            UiMode::AddTodo(ref state) => {
+            UiMode::AddTodo(state) => {
                 match state.target {
                     super::modes::AddTarget::Day(_) => self.draw_board(frame),
                     super::modes::AddTarget::BacklogColumn(_) => self.draw_backlog_view(frame),
                 }
                 self.draw_add_todo(frame, state);
             }
-            UiMode::Detail(ref state) => {
+            UiMode::Detail(state) => {
                 if state.from_backlog {
                     self.draw_backlog_view(frame);
                 } else {

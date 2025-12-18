@@ -1,23 +1,20 @@
-use crate::contracts::{CallToolResponse, Content};
-use chrono::{Local, NaiveDate};
-use machich::service::todo::{ListOptions, ListScope, ProjectFilter, TodoService};
-use miette::{IntoDiagnostic, Result};
+use super::traits::McpTool;
+use super::util::parse_scope;
+use chrono::Local;
+use machich::service::todo::{ListOptions, ProjectFilter, TodoService};
+use miette::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListTodosParams {
-    /// "today", "backlog", or ISO date (YYYY-MM-DD)
     pub scope: Option<String>,
-    /// Include completed todos
     pub include_done: Option<bool>,
-    /// Include notes in response (default: false)
     pub include_notes: Option<bool>,
-    /// Filter by title prefix (e.g., "[my-project]")
-    pub prefix: Option<String>,
-    /// Filter by project tag. Equivalent to prefix "[project]"
     pub project: Option<String>,
+    pub no_project: Option<bool>,
+    pub epic_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -29,6 +26,9 @@ pub struct TodoItem {
     pub scheduled_for: Option<String>,
     pub notes: Option<String>,
     pub order_index: i64,
+    pub project: Option<String>,
+    pub epic_id: Option<String>,
+    pub epic_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -64,13 +64,17 @@ impl ListTodosTool {
                     "type": ["boolean", "null"],
                     "description": "Include notes in response (default: false)"
                 },
-                "prefix": {
-                    "type": ["string", "null"],
-                    "description": "Filter by title prefix (e.g., '[my-project]'). No default filter."
-                },
                 "project": {
                     "type": ["string", "null"],
-                    "description": "Filter by project tag. Equivalent to prefix '[project]'."
+                    "description": "Filter by project column value"
+                },
+                "noProject": {
+                    "type": ["boolean", "null"],
+                    "description": "Filter to todos with no project (project IS NULL)"
+                },
+                "epicId": {
+                    "type": ["string", "null"],
+                    "description": "Filter to todos linked to this epic UUID (sub-tasks of an epic)"
                 }
             },
             "additionalProperties": false
@@ -84,8 +88,9 @@ impl ListTodosTool {
 - `scope` (optional): "today" (default), "backlog", or ISO date (YYYY-MM-DD)
 - `includeDone` (optional): Include completed todos (default: false)
 - `includeNotes` (optional): Include notes in response (default: false)
-- `prefix` (optional): Filter by title prefix (e.g., "[my-project]")
-- `project` (optional): Filter by project tag. Equivalent to prefix "[project]"
+- `project` (optional): Filter by project column value
+- `noProject` (optional): Filter to todos with no project set
+- `epicId` (optional): Filter to sub-tasks of a specific epic
 
 ## Examples
 ```json
@@ -95,24 +100,19 @@ impl ListTodosTool {
 // Filter by project
 { "project": "my-app" }
 
-// Filter by custom prefix
-{ "prefix": "[backend]" }
+// List todos with no project
+{ "noProject": true }
 
 // List backlog items
 { "scope": "backlog" }
+
+// List sub-tasks of an epic
+{ "epicId": "uuid-of-epic" }
 ```
 
 ## Returns
-Array of todos with id, title, status, scheduledFor, notes, orderIndex."#
+Array of todos with id, title, status, scheduledFor, notes, orderIndex, project, epicId, epicTitle."#
             .to_string()
-    }
-
-    pub async fn call(&self, params: ListTodosParams) -> Result<CallToolResponse> {
-        let result = self.execute(params).await?;
-        let json = serde_json::to_string(&result).into_diagnostic()?;
-        Ok(CallToolResponse {
-            content: vec![Content::text(json)],
-        })
     }
 
     pub async fn execute(&self, params: ListTodosParams) -> Result<ListTodosResult> {
@@ -123,34 +123,49 @@ Array of todos with id, title, status, scheduledFor, notes, orderIndex."#
         let include_done = params.include_done.unwrap_or(false);
         let include_notes = params.include_notes.unwrap_or(false);
 
-        // Determine prefix filter: project param takes precedence, then prefix param
-        let prefix_filter = match (&params.project, &params.prefix) {
-            (Some(proj), _) => Some(format!("[{}]", proj)),
-            (None, Some(p)) if !p.is_empty() => Some(p.clone()),
-            _ => None,
+        let project_filter = if params.no_project.unwrap_or(false) {
+            ProjectFilter::IsNull
+        } else {
+            match &params.project {
+                Some(p) => ProjectFilter::Equals(p.clone()),
+                None => ProjectFilter::Any,
+            }
         };
+
+        let epic_id = params
+            .epic_id
+            .as_ref()
+            .map(|s| uuid::Uuid::parse_str(s))
+            .transpose()
+            .map_err(|_| miette::miette!("invalid epicId UUID format"))?;
 
         let opts = ListOptions {
             scope,
             include_done,
-            project: ProjectFilter::Any,
+            project: project_filter,
+            epic_id,
         };
 
         let models = self.service.list(opts).await?;
 
+        let epic_ids: Vec<uuid::Uuid> = models.iter().filter_map(|m| m.epic_id).collect();
+        let epic_titles = self.service.get_epic_titles(&epic_ids).await?;
+
         let todos: Vec<TodoItem> = models
             .into_iter()
-            .filter(|m| match &prefix_filter {
-                Some(prefix) => m.title.starts_with(prefix),
-                None => true,
-            })
-            .map(|m| TodoItem {
-                id: m.id.to_string(),
-                title: m.title,
-                status: m.status,
-                scheduled_for: m.scheduled_for.map(|d| d.format("%Y-%m-%d").to_string()),
-                notes: if include_notes { m.notes } else { None },
-                order_index: m.order_index,
+            .map(|m| {
+                let epic_title = m.epic_id.and_then(|eid| epic_titles.get(&eid).cloned());
+                TodoItem {
+                    id: m.id.to_string(),
+                    title: m.title,
+                    status: m.status,
+                    scheduled_for: m.scheduled_for.map(|d| d.format("%Y-%m-%d").to_string()),
+                    notes: if include_notes { m.notes } else { None },
+                    order_index: m.order_index,
+                    project: m.project,
+                    epic_id: m.epic_id.map(|u| u.to_string()),
+                    epic_title,
+                }
             })
             .collect();
 
@@ -164,17 +179,23 @@ Array of todos with id, title, status, scheduledFor, notes, orderIndex."#
     }
 }
 
-fn parse_scope(s: &str, today: NaiveDate) -> Result<ListScope> {
-    match s.trim().to_lowercase().as_str() {
-        "today" => Ok(ListScope::Day(today)),
-        "backlog" | "someday" => Ok(ListScope::Backlog),
-        date_str => {
-            let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-                .into_diagnostic()
-                .map_err(|_| {
-                    miette::miette!("invalid scope, expected 'today', 'backlog', or YYYY-MM-DD")
-                })?;
-            Ok(ListScope::Day(date))
-        }
+impl McpTool for ListTodosTool {
+    type Params = ListTodosParams;
+    type Result = ListTodosResult;
+
+    fn name() -> &'static str {
+        "list_todos"
+    }
+
+    fn schema() -> Value {
+        Self::schema()
+    }
+
+    fn description() -> String {
+        Self::description()
+    }
+
+    async fn run(&self, params: Self::Params) -> Result<Self::Result> {
+        self.execute(params).await
     }
 }

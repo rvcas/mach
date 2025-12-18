@@ -1,12 +1,14 @@
 use crate::entity::todo;
+use crate::service::error::TodoError;
 use chrono::NaiveDate;
-use miette::{IntoDiagnostic, Result, bail};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, Order,
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, sea_query::Expr,
 };
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
+
+pub type Result<T> = std::result::Result<T, TodoError>;
 
 const STATUS_DONE: &str = "done";
 
@@ -31,6 +33,7 @@ pub struct ListOptions {
     pub scope: ListScope,
     pub include_done: bool,
     pub project: ProjectFilter,
+    pub epic_id: Option<Uuid>,
 }
 
 impl ListOptions {
@@ -39,6 +42,7 @@ impl ListOptions {
             scope: ListScope::Day(date),
             include_done: false,
             project: ProjectFilter::Any,
+            epic_id: None,
         }
     }
 }
@@ -97,7 +101,7 @@ impl TodoService {
             ..Default::default()
         };
 
-        model.insert(&self.db).await.into_diagnostic()
+        Ok(model.insert(&self.db).await?)
     }
 
     async fn resolve_project_with_epic(
@@ -114,18 +118,13 @@ impl TodoService {
             .column(todo::Column::Project)
             .into_tuple::<(Option<String>,)>()
             .one(&self.db)
-            .await
-            .into_diagnostic()?
-            .ok_or_else(|| miette::miette!("epic {epic_id} not found"))?
+            .await?
+            .ok_or(TodoError::EpicNotFound(epic_id))?
             .0;
 
         match (&project, &epic_project) {
             (Some(p), Some(ep)) if p != ep => {
-                bail!(
-                    "project '{}' does not match epic's project '{}'",
-                    p,
-                    ep
-                );
+                Err(TodoError::ProjectMismatch(p.clone(), ep.clone()))
             }
             (Some(_), _) => Ok(project),
             (None, _) => Ok(epic_project),
@@ -146,35 +145,30 @@ impl TodoService {
             ProjectFilter::IsNull => query.filter(todo::Column::Project.is_null()),
         };
 
+        if let Some(eid) = opts.epic_id {
+            query = query.filter(todo::Column::EpicId.eq(eid));
+        }
+
         let done_first = Expr::cust("CASE WHEN status = 'done' THEN 1 ELSE 0 END");
 
-        query
+        Ok(query
             .order_by(done_first, Order::Asc)
             .order_by_asc(todo::Column::OrderIndex)
             .all(&self.db)
-            .await
-            .into_diagnostic()
+            .await?)
     }
 
-    /// Delete a todo by id.
     pub async fn delete(&self, id: Uuid) -> Result<bool> {
         let children_count = todo::Entity::find()
             .filter(todo::Column::EpicId.eq(id))
             .count(&self.db)
-            .await
-            .into_diagnostic()?;
+            .await?;
 
         if children_count > 0 {
-            bail!(
-                "cannot delete todo: it is an epic with {} sub-todo(s)",
-                children_count
-            );
+            return Err(TodoError::HasChildren(children_count));
         }
 
-        let res = todo::Entity::delete_by_id(id)
-            .exec(&self.db)
-            .await
-            .into_diagnostic()?;
+        let res = todo::Entity::delete_by_id(id).exec(&self.db).await?;
 
         Ok(res.rows_affected > 0)
     }
@@ -197,10 +191,10 @@ impl TodoService {
         active.scheduled_for = Set(scheduled_for);
         active.order_index = Set(order_index);
 
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
-    /// Revert a completed todo back to a pending state.
+
     pub async fn mark_pending(&self, id: Uuid) -> Result<todo::Model> {
         let model = self.load(id).await?;
 
@@ -215,10 +209,9 @@ impl TodoService {
         active.status = Set("pending".to_string());
         active.order_index = Set(target_index);
 
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
-    /// Move overdue todos (scheduled in the past) to today.
     pub async fn rollover_to(&self, today: NaiveDate) -> Result<usize> {
         let overdue = todo::Entity::find()
             .filter(todo::Column::ScheduledFor.lt(today))
@@ -226,8 +219,7 @@ impl TodoService {
             .filter(todo::Column::Status.ne(STATUS_DONE))
             .order_by_asc(todo::Column::OrderIndex)
             .all(&self.db)
-            .await
-            .into_diagnostic()?;
+            .await?;
 
         if overdue.is_empty() {
             return Ok(0);
@@ -243,7 +235,7 @@ impl TodoService {
 
             active.scheduled_for = Set(Some(today));
             active.order_index = Set(next_index);
-            active.update(&self.db).await.into_diagnostic()?;
+            active.update(&self.db).await?;
 
             moved += 1;
         }
@@ -277,22 +269,19 @@ impl TodoService {
         active.scheduled_for = Set(target_date);
         active.order_index = Set(target_index);
 
-        let updated = active.update(&self.db).await.into_diagnostic()?;
-
-        Ok(updated)
+        Ok(active.update(&self.db).await?)
     }
 
-    /// Update the backlog_column field for a backlog item.
     pub async fn set_backlog_column(&self, id: Uuid, column: i64) -> Result<todo::Model> {
         let model = self.load(id).await?;
 
         let mut active: todo::ActiveModel = model.into();
         active.backlog_column = Set(column);
 
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
-    /// Get a todo by id.
+
     pub async fn get(&self, id: Uuid) -> Result<todo::Model> {
         self.load(id).await
     }
@@ -302,15 +291,31 @@ impl TodoService {
         Ok(epic.title)
     }
 
-    /// Update the title of a todo.
+    pub async fn get_epic_titles(&self, ids: &[Uuid]) -> Result<std::collections::HashMap<Uuid, String>> {
+        use std::collections::HashMap;
+
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let epics = todo::Entity::find()
+            .filter(todo::Column::Id.is_in(ids.to_vec()))
+            .select_only()
+            .columns([todo::Column::Id, todo::Column::Title])
+            .into_tuple::<(Uuid, String)>()
+            .all(&self.db)
+            .await?;
+
+        Ok(epics.into_iter().collect())
+    }
+
     pub async fn update_title(&self, id: Uuid, title: String) -> Result<todo::Model> {
         let model = self.load(id).await?;
         let mut active: todo::ActiveModel = model.into();
         active.title = Set(title);
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
-    /// Update the scheduled_for date of a todo.
     pub async fn update_scheduled_for(
         &self,
         id: Uuid,
@@ -319,15 +324,14 @@ impl TodoService {
         let model = self.load(id).await?;
         let mut active: todo::ActiveModel = model.into();
         active.scheduled_for = Set(scheduled_for);
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
-    /// Update the notes of a todo.
     pub async fn update_notes(&self, id: Uuid, notes: Option<String>) -> Result<todo::Model> {
         let model = self.load(id).await?;
         let mut active: todo::ActiveModel = model.into();
         active.notes = Set(notes);
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
     pub async fn update_project(&self, id: Uuid, project: Option<String>) -> Result<todo::Model> {
@@ -338,22 +342,18 @@ impl TodoService {
             if let (Some(p), Some(ep)) = (&project, &epic.project)
                 && p != ep
             {
-                bail!(
-                    "project '{}' does not match epic's project '{}'",
-                    p,
-                    ep
-                );
+                return Err(TodoError::ProjectMismatch(p.clone(), ep.clone()));
             }
         }
 
         let mut active: todo::ActiveModel = model.into();
         active.project = Set(project);
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
     pub async fn update_epic_id(&self, id: Uuid, epic_id: Option<Uuid>) -> Result<todo::Model> {
         if epic_id == Some(id) {
-            bail!("a todo cannot be its own epic");
+            return Err(TodoError::SelfReference);
         }
 
         let model = self.load(id).await?;
@@ -365,10 +365,9 @@ impl TodoService {
         let mut active: todo::ActiveModel = model.into();
         active.epic_id = Set(epic_id);
         active.project = Set(resolved_project);
-        active.update(&self.db).await.into_diagnostic()
+        Ok(active.update(&self.db).await?)
     }
 
-    /// Reorder within a column/group (pending or done).
     pub async fn reorder(&self, id: Uuid, direction: ReorderDirection) -> Result<()> {
         let model = self.load(id).await?;
 
@@ -383,14 +382,10 @@ impl TodoService {
             StatusFilter::Pending
         };
 
-        let mut tasks = self
-            .column_query(scope, status)
-            .all(&self.db)
-            .await
-            .into_diagnostic()?;
+        let mut tasks = self.column_query(scope, status).all(&self.db).await?;
 
         let Some(idx) = tasks.iter().position(|t| t.id == id) else {
-            bail!("todo {} no longer exists", id);
+            return Err(TodoError::NotFound(id));
         };
 
         match direction {
@@ -404,7 +399,7 @@ impl TodoService {
 
             active.order_index = Set(index as i64);
 
-            active.update(&self.db).await.into_diagnostic()?;
+            active.update(&self.db).await?;
         }
 
         Ok(())
@@ -413,9 +408,8 @@ impl TodoService {
     async fn load(&self, id: Uuid) -> Result<todo::Model> {
         todo::Entity::find_by_id(id)
             .one(&self.db)
-            .await
-            .into_diagnostic()?
-            .ok_or_else(|| miette::miette!("todo {id} not found"))
+            .await?
+            .ok_or(TodoError::NotFound(id))
     }
 
     fn column_query(
@@ -482,11 +476,7 @@ impl TodoService {
             Extremum::Max => query.order_by_desc(todo::Column::OrderIndex),
         };
 
-        Ok(query
-            .one(&self.db)
-            .await
-            .into_diagnostic()?
-            .map(|model| model.order_index))
+        Ok(query.one(&self.db).await?.map(|model| model.order_index))
     }
 }
 
@@ -655,6 +645,7 @@ mod tests {
             scope: ListScope::Backlog,
             include_done: false,
             project: ProjectFilter::Equals("proj-a".into()),
+            epic_id: None,
         };
 
         let results = service.list(opts).await.unwrap();
@@ -680,6 +671,7 @@ mod tests {
             scope: ListScope::Backlog,
             include_done: false,
             project: ProjectFilter::IsNull,
+            epic_id: None,
         };
 
         let results = service.list(opts).await.unwrap();
@@ -778,6 +770,36 @@ mod tests {
 
         let title = service.get_epic_title(epic.id).await.unwrap();
         assert_eq!(title, "epic: My Feature");
+    }
+
+    #[tokio::test]
+    async fn get_epic_titles_returns_batch() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let epic1 = service
+            .add("epic: Auth", None, None, None, None)
+            .await
+            .unwrap();
+        let epic2 = service
+            .add("epic: Payments", None, None, None, None)
+            .await
+            .unwrap();
+
+        let titles = service.get_epic_titles(&[epic1.id, epic2.id]).await.unwrap();
+
+        assert_eq!(titles.len(), 2);
+        assert_eq!(titles.get(&epic1.id), Some(&"epic: Auth".to_string()));
+        assert_eq!(titles.get(&epic2.id), Some(&"epic: Payments".to_string()));
+    }
+
+    #[tokio::test]
+    async fn get_epic_titles_empty_input_returns_empty() {
+        let db = test_db().await;
+        let service = TodoService::new(db);
+
+        let titles = service.get_epic_titles(&[]).await.unwrap();
+        assert!(titles.is_empty());
     }
 
     #[tokio::test]

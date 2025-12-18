@@ -43,6 +43,7 @@ impl Args {
             scope,
             include_done: self.done,
             project,
+            epic_id: None,
         };
 
         let todos = services.todos.list(opts).await?;

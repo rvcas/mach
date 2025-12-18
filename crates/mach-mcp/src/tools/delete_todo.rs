@@ -1,4 +1,4 @@
-use crate::contracts::{CallToolResponse, Content};
+use super::traits::McpTool;
 use machich::service::todo::TodoService;
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
@@ -56,14 +56,6 @@ Confirmation with deleted status."#
             .to_string()
     }
 
-    pub async fn call(&self, params: DeleteTodoParams) -> Result<CallToolResponse> {
-        let result = self.execute(params).await?;
-        let json = serde_json::to_string(&result).into_diagnostic()?;
-        Ok(CallToolResponse {
-            content: vec![Content::text(json)],
-        })
-    }
-
     pub async fn execute(&self, params: DeleteTodoParams) -> Result<DeleteTodoResult> {
         let id = Uuid::parse_str(&params.id)
             .into_diagnostic()
@@ -82,5 +74,26 @@ Confirmation with deleted status."#
             deleted,
             message,
         })
+    }
+}
+
+impl McpTool for DeleteTodoTool {
+    type Params = DeleteTodoParams;
+    type Result = DeleteTodoResult;
+
+    fn name() -> &'static str {
+        "delete_todo"
+    }
+
+    fn schema() -> Value {
+        Self::schema()
+    }
+
+    fn description() -> String {
+        Self::description()
+    }
+
+    async fn run(&self, params: Self::Params) -> Result<Self::Result> {
+        self.execute(params).await
     }
 }
