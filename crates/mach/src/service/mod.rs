@@ -1,5 +1,6 @@
 pub mod config;
 pub mod connection;
+pub mod error;
 pub mod todo;
 
 use std::path::PathBuf;

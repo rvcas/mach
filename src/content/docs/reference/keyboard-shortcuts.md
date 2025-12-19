@@ -17,6 +17,7 @@ The main view showing 7 days of your week.
 | `a`         | Add new todo to focused column                    |
 | `x`         | Toggle completion                                 |
 | `dd`        | Delete todo                                       |
+| `f`         | Refresh data from database                        |
 | `s`         | Send to backlog                                   |
 | `t`         | Move to today                                     |
 | `T`         | Move to tomorrow                                  |
@@ -38,6 +39,7 @@ Fullscreen 4-column view for organizing "someday" items.
 | `a`               | Add new todo                                   |
 | `x`               | Toggle completion                              |
 | `dd`              | Delete                                         |
+| `f`               | Refresh data from database                     |
 | `t`               | Move to today                                  |
 | `T`               | Move to tomorrow                               |
 | `?`               | Toggle help                                    |

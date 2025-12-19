@@ -33,6 +33,7 @@ pub struct BacklogSelection {
 pub struct CursorState {
     pub focus: usize,
     pub day_rows: Vec<usize>,
+    pub scroll_offsets: Vec<usize>,
     pub selection: Option<Selection>,
 }
 
@@ -41,6 +42,7 @@ impl CursorState {
         Self {
             focus: 0,
             day_rows: vec![0; num_days],
+            scroll_offsets: vec![0; num_days],
             selection: None,
         }
     }
@@ -112,6 +114,7 @@ impl CursorState {
 
     pub fn sync_after_refresh(&mut self, day_count: usize, board: &BoardData) {
         self.day_rows.resize(day_count, 0);
+        self.scroll_offsets.resize(day_count, 0);
 
         if self.focus >= day_count {
             self.focus = day_count.saturating_sub(1);
@@ -122,8 +125,14 @@ impl CursorState {
 
             if len == 0 {
                 *row = 0;
-            } else if *row >= len {
-                *row = len - 1;
+                self.scroll_offsets[idx] = 0;
+            } else {
+                if *row >= len {
+                    *row = len - 1;
+                }
+                if self.scroll_offsets[idx] >= len {
+                    self.scroll_offsets[idx] = len.saturating_sub(1);
+                }
             }
         }
 
@@ -142,6 +151,25 @@ impl CursorState {
         }
     }
 
+    pub fn ensure_visible(&mut self, col: usize, visible_rows: usize) {
+        if visible_rows == 0 || col >= self.scroll_offsets.len() {
+            return;
+        }
+
+        let row = self.day_rows.get(col).copied().unwrap_or(0);
+        let scroll = self.scroll_offsets[col];
+
+        if row < scroll {
+            self.scroll_offsets[col] = row;
+        } else if row >= scroll + visible_rows {
+            self.scroll_offsets[col] = row.saturating_sub(visible_rows.saturating_sub(1));
+        }
+    }
+
+    pub fn scroll_offset(&self, col: usize) -> usize {
+        self.scroll_offsets.get(col).copied().unwrap_or(0)
+    }
+
     pub fn set_focus_row(&mut self, col: usize, row: usize) {
         self.focus = col;
 
@@ -156,6 +184,7 @@ impl CursorState {
 pub struct BacklogCursor {
     pub column: usize,
     pub rows: [usize; BACKLOG_COLUMNS],
+    pub scroll_offsets: [usize; BACKLOG_COLUMNS],
     pub selection: Option<BacklogSelection>,
 }
 
@@ -164,6 +193,7 @@ impl BacklogCursor {
         Self {
             column: 0,
             rows: [0; BACKLOG_COLUMNS],
+            scroll_offsets: [0; BACKLOG_COLUMNS],
             selection: None,
         }
     }
@@ -257,8 +287,14 @@ impl BacklogCursor {
             let len = board.backlog_col_len(col);
             if len == 0 {
                 self.rows[col] = 0;
-            } else if self.rows[col] >= len {
-                self.rows[col] = len - 1;
+                self.scroll_offsets[col] = 0;
+            } else {
+                if self.rows[col] >= len {
+                    self.rows[col] = len - 1;
+                }
+                if self.scroll_offsets[col] >= len {
+                    self.scroll_offsets[col] = len.saturating_sub(1);
+                }
             }
         }
 
@@ -274,6 +310,29 @@ impl BacklogCursor {
             } else {
                 self.selection = None;
             }
+        }
+    }
+
+    pub fn ensure_visible(&mut self, col: usize, visible_rows: usize) {
+        if visible_rows == 0 || col >= BACKLOG_COLUMNS {
+            return;
+        }
+
+        let row = self.rows[col];
+        let scroll = self.scroll_offsets[col];
+
+        if row < scroll {
+            self.scroll_offsets[col] = row;
+        } else if row >= scroll + visible_rows {
+            self.scroll_offsets[col] = row.saturating_sub(visible_rows.saturating_sub(1));
+        }
+    }
+
+    pub fn scroll_offset(&self, col: usize) -> usize {
+        if col < BACKLOG_COLUMNS {
+            self.scroll_offsets[col]
+        } else {
+            0
         }
     }
 }

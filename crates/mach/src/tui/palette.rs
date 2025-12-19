@@ -12,3 +12,6 @@ pub const ACCENT: Color = Color::Magenta;
 
 // Chrome
 pub const BORDER: Color = Color::DarkGray;
+
+// Feedback
+pub const ERROR: Color = Color::Red;
