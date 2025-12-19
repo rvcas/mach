@@ -115,6 +115,9 @@ impl App {
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true
             }
+            KeyCode::Char('f') if key.modifiers.is_empty() => {
+                self.refresh_board().ok();
+            }
             _ => {}
         }
     }
@@ -161,6 +164,9 @@ impl App {
             }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.should_quit = true;
+            }
+            KeyCode::Char('f') if key.modifiers.is_empty() => {
+                self.refresh_board().ok();
             }
             _ => {}
         }

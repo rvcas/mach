@@ -87,6 +87,7 @@ mach list --done       # completed items
 | `a`     | Add new todo to focused column                    |
 | `x`     | Toggle completion                                 |
 | `dd`    | Delete todo                                       |
+| `f`     | Refresh data from database                        |
 | `s`     | Send to backlog                                   |
 | `t`     | Move to today                                     |
 | `T`     | Move to tomorrow                                  |
@@ -105,6 +106,7 @@ mach list --done       # completed items
 | `a`       | Add new todo                                   |
 | `x`       | Toggle completion                              |
 | `dd`      | Delete                                         |
+| `f`       | Refresh data from database                     |
 | `t`       | Move to today                                  |
 | `T`       | Move to tomorrow                               |
 | `?`       | Toggle help                                    |
