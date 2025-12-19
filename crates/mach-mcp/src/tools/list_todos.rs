@@ -53,27 +53,27 @@ impl ListTodosTool {
             "type": "object",
             "properties": {
                 "scope": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "Filter scope: 'today' (default), 'backlog', or ISO date (YYYY-MM-DD)"
                 },
                 "includeDone": {
-                    "type": ["boolean", "null"],
+                    "type": "boolean",
                     "description": "Include completed todos (default: false)"
                 },
                 "includeNotes": {
-                    "type": ["boolean", "null"],
+                    "type": "boolean",
                     "description": "Include notes in response (default: false)"
                 },
                 "project": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "Filter by project column value"
                 },
                 "noProject": {
-                    "type": ["boolean", "null"],
+                    "type": "boolean",
                     "description": "Filter to todos with no project (project IS NULL)"
                 },
                 "epicId": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "Filter to todos linked to this epic UUID (sub-tasks of an epic)"
                 }
             },

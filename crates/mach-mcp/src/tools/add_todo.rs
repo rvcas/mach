@@ -52,19 +52,19 @@ impl AddTodoTool {
                     "description": "The title/description of the todo item"
                 },
                 "scheduledFor": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "ISO date (YYYY-MM-DD) to schedule the todo. Omitted = today. Use 'backlog' for someday items."
                 },
                 "notes": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "Optional notes/details for the todo"
                 },
                 "project": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "Optional project tag (e.g., 'my-app')."
                 },
                 "epicId": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "UUID of an existing todo to use as this todo's epic (parent). The todo inherits the epic's project if not specified."
                 }
             },

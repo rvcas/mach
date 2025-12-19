@@ -50,23 +50,23 @@ impl UpdateTodoTool {
                     "description": "UUID of the todo to update"
                 },
                 "title": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "New title (if provided)"
                 },
                 "scheduledFor": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "New scheduled date (YYYY-MM-DD) or null to move to backlog"
                 },
                 "notes": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "New notes (if provided)"
                 },
                 "project": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "New project tag, or empty string/\"null\" to clear"
                 },
                 "epicId": {
-                    "type": ["string", "null"],
+                    "type": "string",
                     "description": "UUID of epic to link under, or empty string/\"null\" to clear"
                 }
             },

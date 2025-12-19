@@ -53,8 +53,8 @@ impl MoveTodoTool {
                     "description": "Target: 'today', 'backlog', or ISO date (YYYY-MM-DD)"
                 },
                 "placement": {
-                    "type": ["string", "null"],
-                    "enum": ["top", "bottom", null],
+                    "type": "string",
+                    "enum": ["top", "bottom"],
                     "description": "Where to place in the target column (default: 'top')"
                 }
             },
