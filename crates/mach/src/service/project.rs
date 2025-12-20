@@ -74,4 +74,32 @@ impl ProjectService {
             .await
             .into_diagnostic()
     }
+
+    pub async fn update_name(&self, id: Uuid, name: impl Into<String>) -> Result<project::Model> {
+        let model = project::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("project not found"))?;
+
+        let mut active: project::ActiveModel = model.into();
+        active.name = Set(name.into());
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    pub async fn update_status(
+        &self,
+        id: Uuid,
+        status: impl Into<String>,
+    ) -> Result<project::Model> {
+        let model = project::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("project not found"))?;
+
+        let mut active: project::ActiveModel = model.into();
+        active.status = Set(status.into());
+        active.update(&self.db).await.into_diagnostic()
+    }
 }

@@ -1,15 +1,19 @@
 pub mod create;
 pub mod list;
+pub mod update;
 
 /// Manage workspaces
 #[derive(clap::Subcommand)]
 pub enum Cmd {
     /// Create a new workspace
-    #[clap(alias = "c")]
+    #[clap(visible_alias = "c")]
     Create(create::Args),
     /// List all workspaces
-    #[clap(alias = "l")]
+    #[clap(visible_alias = "l")]
     List(list::Args),
+    /// Update a workspace
+    #[clap(visible_alias = "u")]
+    Update(update::Args),
 }
 
 impl Cmd {
@@ -17,6 +21,7 @@ impl Cmd {
         match self {
             Cmd::Create(args) => args.exec(services).await,
             Cmd::List(args) => args.exec(services).await,
+            Cmd::Update(args) => args.exec(services).await,
         }
     }
 }

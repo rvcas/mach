@@ -50,4 +50,16 @@ impl WorkspaceService {
             .await
             .into_diagnostic()
     }
+
+    pub async fn update_name(&self, id: Uuid, name: impl Into<String>) -> Result<workspace::Model> {
+        let model = workspace::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("workspace not found"))?;
+
+        let mut active: workspace::ActiveModel = model.into();
+        active.name = Set(name.into());
+        active.update(&self.db).await.into_diagnostic()
+    }
 }

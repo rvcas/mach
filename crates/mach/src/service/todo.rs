@@ -232,6 +232,28 @@ impl TodoService {
         self.load(id).await
     }
 
+    /// Find a todo by title or id.
+    pub async fn find_by_title_or_id(&self, title_or_id: &str) -> Result<Option<todo::Model>> {
+        let matches = todo::Entity::find()
+            .filter(
+                Condition::any()
+                    .add(todo::Column::Id.eq(title_or_id))
+                    .add(todo::Column::Title.eq(title_or_id)),
+            )
+            .all(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        match matches.len() {
+            0 => Ok(None),
+            1 => Ok(Some(matches.into_iter().next().unwrap())),
+            _ => bail!(
+                "multiple todos match '{}', use the id instead (run `mach list -i` to see ids)",
+                title_or_id
+            ),
+        }
+    }
+
     /// Update the title of a todo.
     pub async fn update_title(&self, id: Uuid, title: String) -> Result<todo::Model> {
         let model = self.load(id).await?;
@@ -257,6 +279,20 @@ impl TodoService {
         let model = self.load(id).await?;
         let mut active: todo::ActiveModel = model.into();
         active.notes = Set(notes);
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    /// Update the workspace and project of a todo.
+    pub async fn update_workspace_project(
+        &self,
+        id: Uuid,
+        workspace_id: Option<Uuid>,
+        project_id: Option<Uuid>,
+    ) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+        let mut active: todo::ActiveModel = model.into();
+        active.workspace_id = Set(workspace_id);
+        active.project_id = Set(project_id);
         active.update(&self.db).await.into_diagnostic()
     }
 

@@ -13,6 +13,10 @@ pub struct Args {
     /// Include completed todos
     #[clap(short, long, default_value = "false")]
     done: bool,
+
+    /// Include the id column
+    #[clap(short, long, default_value = "false")]
+    id: bool,
 }
 
 impl Args {
@@ -36,11 +40,19 @@ impl Args {
             return Ok(());
         }
 
-        println!(
-            "{:<30} {:<8} {:<15} {:<15} {:<12}",
-            "Title", "Status", "Workspace", "Project", "Day"
-        );
-        println!("{}", "-".repeat(85));
+        if self.id {
+            println!(
+                "{:<38} {:<30} {:<8} {:<15} {:<15} {:<12}",
+                "Id", "Title", "Status", "Workspace", "Project", "Day"
+            );
+            println!("{}", "-".repeat(125));
+        } else {
+            println!(
+                "{:<30} {:<8} {:<15} {:<15} {:<12}",
+                "Title", "Status", "Workspace", "Project", "Day"
+            );
+            println!("{}", "-".repeat(85));
+        }
 
         for todo in todos {
             let day = todo
@@ -74,10 +86,17 @@ impl Args {
                 None => "-".to_string(),
             };
 
-            println!(
-                "{:<30} {:<8} {:<15} {:<15} {:<12}",
-                todo.title, status, workspace_name, project_name, day
-            );
+            if self.id {
+                println!(
+                    "{:<38} {:<30} {:<8} {:<15} {:<15} {:<12}",
+                    todo.id, todo.title, status, workspace_name, project_name, day
+                );
+            } else {
+                println!(
+                    "{:<30} {:<8} {:<15} {:<15} {:<12}",
+                    todo.title, status, workspace_name, project_name, day
+                );
+            }
         }
 
         Ok(())
