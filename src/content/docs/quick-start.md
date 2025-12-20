@@ -64,9 +64,32 @@ mach list
 # List backlog items
 mach list --some-day
 
-# List completed items
-mach list --done
+# Mark as done
+mach done "Buy groceries"
+
+# Delete a todo
+mach delete "Old task"
 ```
+
+## Organize with Workspaces & Projects
+
+Group related todos using workspaces and projects:
+
+```sh
+# Create a workspace
+mach workspaces create "Work"
+
+# Create a project in the workspace
+mach projects create -w Work "Q1 Goals"
+
+# Add a todo to the project
+mach add -p "Q1 Goals" "Review roadmap"
+
+# List projects
+mach projects list
+```
+
+See the [CLI Reference](/reference/cli/) for all commands.
 
 ## Get Help
 

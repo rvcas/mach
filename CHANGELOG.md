@@ -1,3 +1,24 @@
+# Version 0.3.0 (2025-12-20)
+
+- Add workspaces entity for top-level organization
+- Add projects entity within workspaces for grouping related todos
+- Add `mach workspaces create` command to create a workspace
+- Add `mach workspaces list` command to list workspaces with stats
+- Add `mach workspaces update` command to rename a workspace
+- Add `mach projects create` command to create a project in a workspace
+- Add `mach projects list` command to list projects with stats
+- Add `mach projects update` command to update project name/status
+- Add `mach projects done` command to mark a project as done
+- Add `mach projects reopen` command to reopen a project
+- Add `mach done` command to mark a todo as done by title or id
+- Add `mach reopen` command to reopen a completed todo
+- Add `mach update` command to update todo title, date, notes, workspace, project
+- Add `mach delete` command to delete a todo by title or id
+- Add `-w/--workspace` and `-p/--project` flags to `mach add`
+- Add `-i/--id` flag to `mach list`, `mach workspaces list`, `mach projects list`
+- Add workspace and project columns to `mach list` output
+- Add visible aliases for all commands (shown in `--help`)
+
 # Version 0.2.4 (2025-12-04)
 
 - Fix double key press on Windows by filtering to only handle key press events

@@ -18,9 +18,10 @@
 
 - **Project Entity**
   - Fields: `id` (UUID), `name` (String), `workspace_id` (UUID, required),
-    `created_at`, `updated_at`.
+    `status` (String: `pending`, `done`, or `permanent`), `created_at`, `updated_at`.
   - A project belongs to exactly one workspace.
   - A project can have many todos.
+  - `permanent` status is for ongoing projects that are never "complete".
 
 - **Todo Entity**
   - Fields: `id` (UUID), `title` (String), `status` (String, defaults to `"pending"`),
@@ -65,12 +66,51 @@
 
 ## CLI Behaviors
 
-- `mach add [--some-day] "Buy milk"`: validates input, writes todo through
-  service layer (SeaORM).
-- `mach list [--some-day] [--done]`: prints a table
-  (title, status, scheduled_for, order) for the filtered set.
-- CLI shares service layer with TUI; never bypasses domain logic
-  (e.g., auto-rollover runs before listing).
+CLI shares service layer with TUI; never bypasses domain logic
+(e.g., auto-rollover runs before listing).
+
+### Todo Commands
+
+- `mach add [-s|--some-day] [-w|--workspace] [-p|--project] "title"`:
+  Add a todo. Defaults to today; `--some-day` adds to backlog.
+  `-w` assigns to a workspace, `-p` assigns to a project (inherits workspace).
+- `mach list [-s|--some-day] [-d|--done] [-i|--id]`:
+  List todos. Shows title, status, workspace, project, and day columns.
+  `-i` includes UUID column.
+- `mach done <ref>`: Mark a todo as done by title or UUID.
+- `mach reopen <ref>`: Reopen a completed todo (set status to pending).
+- `mach update <ref> [-t|--title] [-d|--day] [-n|--notes] [-w|--workspace] [-p|--project]`:
+  Update a todo's properties. Day accepts `YYYY-MM-DD` or `none`/`someday`.
+- `mach delete <ref>`: Delete a todo by title or UUID.
+
+### Workspace Commands
+
+- `mach workspaces create "name"`: Create a new workspace.
+- `mach workspaces list [-i|--id]`: List all workspaces with project/todo counts.
+- `mach workspaces update <ref> [-n|--name]`: Update a workspace's name.
+
+### Project Commands
+
+- `mach projects create -w <workspace> [-p|--permanent] "name"`:
+  Create a project in a workspace. `--permanent` sets status to permanent.
+- `mach projects list [-w|--workspace] [-i|--id]`:
+  List projects, optionally filtered by workspace.
+- `mach projects update <ref> [-n|--name] [-s|--status]`:
+  Update a project. Status can be `pending`, `done`, or `permanent`.
+- `mach projects done <ref>`: Mark a project as done.
+- `mach projects reopen <ref>`: Reopen a project (set status to pending).
+
+### Aliases
+
+All commands have visible aliases shown in help output:
+- `add` → `a`, `list` → `l`, `done` → `d`, `reopen` → `r`, `update` → `u`, `delete` → `rm`
+- `workspaces` → `w`, `projects` → `p`
+- Subcommands: `create` → `c`, `list` → `l`, `update` → `u`, `done` → `d`, `reopen` → `r`
+
+### Reference Resolution
+
+Commands accepting `<ref>` can match by title/name or UUID. If multiple items
+match a title, an error is returned asking the user to use the UUID instead.
 
 ## TUI Interaction Model
 
@@ -205,16 +245,22 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
 - [x] Add todo details modal (`Space` key) for editing title, date, notes.
 - [x] Add `t`/`T` shortcuts in weekly view to move todos to today/tomorrow.
 - [x] Add help overlay (`?` key) with context-aware shortcuts.
+- [x] Add workspace entity with CLI commands (create, list, update).
+- [x] Add project entity with CLI commands (create, list, update, done, reopen).
+- [x] Add `-w/--workspace` and `-p/--project` flags to `add` and `update`.
+- [x] Add `done`, `reopen`, and `delete` CLI commands for todos.
+- [x] Add `-i/--id` flag to list commands for showing UUIDs.
 - [ ] Tests: unit tests for services (rollover, ordering) + integration tests
       for CLI.
 
 ## Known Gaps / Open Questions
 
-- Do we allow multiple workspaces/boards? (Assume single board for MVP.)
 - Should deletion be permanent or soft-delete (status `archived`)? For now,
   permanent with possible undo later.
 - Need accessibility plan for non-Vim users (perhaps optional Emacs/Arrow mode).
 - Completion keybindings should remain customizable; default is `x` but expose
   it via settings later in case platforms reserve it.
+- TUI does not yet show workspace/project assignments; currently CLI-only.
+- No workspace/project delete commands yet.
 
 This SPEC should evolve; update checkpoints as tasks complete or requirements shift.

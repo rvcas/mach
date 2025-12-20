@@ -26,6 +26,17 @@ If you had a task scheduled for yesterday that you didn't complete, it will appe
 
 When you mark a backlog item complete (`x`), it receives today's date so it appears in your weekly view as a completed task. This gives you a record of when things got done.
 
+## Workspaces & Projects
+
+Organize your todos with a two-level hierarchy:
+
+- **Workspaces** — Top-level containers for related work (e.g., "Personal", "Work")
+- **Projects** — Groups within a workspace (e.g., "Q1 Goals", "Home Renovation")
+
+Todos can optionally belong to a workspace and/or project. If a todo is assigned to a project, it automatically belongs to that project's workspace.
+
+Projects have a status: `pending`, `done`, or `permanent`. Permanent projects are for ongoing work that's never "complete" (like "Daily Standup").
+
 ## Data Storage
 
 Mach stores everything in a local SQLite database:

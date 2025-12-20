@@ -34,6 +34,7 @@ export default defineConfig({
         {
           label: "Reference",
           items: [
+            { label: "CLI Reference", slug: "reference/cli" },
             {
               label: "Keyboard Shortcuts",
               slug: "reference/keyboard-shortcuts",

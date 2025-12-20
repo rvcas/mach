@@ -6,6 +6,7 @@ A terminal-based weekly planner inspired by [Tweek](https://tweek.so). Plan your
 
 - **Weekly view** — 7-day columns showing your week at a glance
 - **Backlog view** — 4-column organizer for "someday" items
+- **Workspaces & Projects** — Organize todos with a two-level hierarchy
 - **Vim navigation** — `h/j/k/l` to move, `Enter` to select and drag
 - **Local-first** — SQLite storage, no cloud, no account needed
 - **Adaptive colors** — Uses terminal theme colors for universal compatibility
