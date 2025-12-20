@@ -1,6 +1,8 @@
 pub mod config;
 pub mod connection;
+pub mod project;
 pub mod todo;
+pub mod workspace;
 
 use std::path::PathBuf;
 
@@ -11,13 +13,17 @@ use miette::{Context, IntoDiagnostic};
 use self::{
     config::{ConfigService, WeekStart},
     connection::init_database,
+    project::ProjectService,
     todo::TodoService,
+    workspace::WorkspaceService,
 };
 
 #[derive(Clone)]
 pub struct Services {
     pub todos: TodoService,
     pub config: ConfigService,
+    pub workspaces: WorkspaceService,
+    pub projects: ProjectService,
     today: NaiveDate,
     week_start_pref: WeekStart,
 }
@@ -30,6 +36,8 @@ impl Services {
 
         let todos = TodoService::new(conn.clone());
         let config = ConfigService::new(conn.clone());
+        let workspaces = WorkspaceService::new(conn.clone());
+        let projects = ProjectService::new(conn.clone());
 
         let today = Local::now().date_naive();
 
@@ -39,6 +47,8 @@ impl Services {
         Ok(Self {
             todos,
             config,
+            workspaces,
+            projects,
             today,
             week_start_pref: week_start,
         })

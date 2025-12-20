@@ -388,14 +388,19 @@ impl App {
     pub fn submit_add_todo(&mut self, title: String, target: AddTarget) -> miette::Result<()> {
         match target {
             AddTarget::Day(date) => {
-                self.runtime
-                    .block_on(self.services.todos.add(&title, Some(date), None))?;
+                self.runtime.block_on(self.services.todos.add(
+                    &title,
+                    Some(date),
+                    None,
+                    None,
+                    None,
+                ))?;
                 self.refresh_board()?;
             }
             AddTarget::BacklogColumn(col) => {
                 let model = self
                     .runtime
-                    .block_on(self.services.todos.add(&title, None, None))?;
+                    .block_on(self.services.todos.add(&title, None, None, None, None))?;
                 self.runtime
                     .block_on(self.services.todos.set_backlog_column(model.id, col as i64))?;
                 self.refresh_backlog()?;

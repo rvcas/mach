@@ -11,14 +11,33 @@
 
 ## Core Concepts
 
+- **Workspace Entity**
+  - Fields: `id` (UUID), `name` (String), `created_at`, `updated_at`.
+  - A workspace can have many projects and many todos.
+  - Workspaces provide top-level organization for grouping related work.
+
+- **Project Entity**
+  - Fields: `id` (UUID), `name` (String), `workspace_id` (UUID, required),
+    `created_at`, `updated_at`.
+  - A project belongs to exactly one workspace.
+  - A project can have many todos.
+
 - **Todo Entity**
   - Fields: `id` (UUID), `title` (String), `status` (String, defaults to `"pending"`),
     `scheduled_for` (`Option<Date>`), `order_index` (i64 for deterministic intra-column sorting),
     `backlog_column` (i64 for backlog column assignment),
-    `created_at`, `updated_at`, `notes` (optional text), `metadata` (JSON for future tags/links).
+    `created_at`, `updated_at`, `notes` (optional text), `metadata` (JSON for future tags/links),
+    `workspace_id` (`Option<UUID>`), `project_id` (`Option<UUID>`).
   - Backlog/Someday is derived by `scheduled_for.is_none()`.
   - Only string statuses for now (`pending`, `done`), but stored as free-form
     string to allow future states (`in_progress`, `blocked`, etc.).
+  - **Workspace/Project constraints**:
+    - A todo can optionally belong to a workspace (via `workspace_id`).
+    - A todo can optionally belong to a project (via `project_id`).
+    - If a todo has a `project_id`, it MUST have a `workspace_id` matching the
+      project's workspace.
+    - A todo cannot be in a project without being in that project's workspace.
+    - A todo cannot be in a project AND a different workspace than the project.
 - **Week View**
   - Current week is calculated relative to `week_start` preference (Sunday or Monday).
   - Each column renders tasks sorted by `order_index`.

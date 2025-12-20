@@ -36,8 +36,11 @@ impl Args {
             return Ok(());
         }
 
-        println!("{:<8} {:<12} Title", "Status", "Day");
-        println!("{}", "-".repeat(48));
+        println!(
+            "{:<30} {:<8} {:<15} {:<15} {:<12}",
+            "Title", "Status", "Workspace", "Project", "Day"
+        );
+        println!("{}", "-".repeat(85));
 
         for todo in todos {
             let day = todo
@@ -51,7 +54,30 @@ impl Args {
                 "pending"
             };
 
-            println!("{:<8} {:<12} {}", status, day, todo.title);
+            let workspace_name = match todo.workspace_id {
+                Some(id) => services
+                    .workspaces
+                    .get(id)
+                    .await?
+                    .map(|w| w.name)
+                    .unwrap_or_else(|| "-".to_string()),
+                None => "-".to_string(),
+            };
+
+            let project_name = match todo.project_id {
+                Some(id) => services
+                    .projects
+                    .get(id)
+                    .await?
+                    .map(|p| p.name)
+                    .unwrap_or_else(|| "-".to_string()),
+                None => "-".to_string(),
+            };
+
+            println!(
+                "{:<30} {:<8} {:<15} {:<15} {:<12}",
+                todo.title, status, workspace_name, project_name, day
+            );
         }
 
         Ok(())

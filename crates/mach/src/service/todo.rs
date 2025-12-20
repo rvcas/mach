@@ -65,6 +65,8 @@ impl TodoService {
         title: impl Into<String>,
         scheduled_for: Option<NaiveDate>,
         notes: Option<String>,
+        workspace_id: Option<Uuid>,
+        project_id: Option<Uuid>,
     ) -> Result<todo::Model> {
         let order_index = self.next_top_order_index(scheduled_for).await?;
 
@@ -76,6 +78,8 @@ impl TodoService {
             order_index: Set(order_index),
             notes: Set(notes),
             metadata: Set(JsonValue::Null),
+            workspace_id: Set(workspace_id),
+            project_id: Set(project_id),
             ..Default::default()
         };
 
@@ -306,6 +310,40 @@ impl TodoService {
             .ok_or_else(|| miette::miette!("todo {id} not found"))
     }
 
+    pub async fn stats_for_workspace(&self, workspace_id: Uuid) -> Result<TodoStats> {
+        let todos = todo::Entity::find()
+            .filter(todo::Column::WorkspaceId.eq(workspace_id))
+            .all(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        let total = todos.len() as u64;
+        let completed = todos.iter().filter(|t| t.status == STATUS_DONE).count() as u64;
+
+        Ok(TodoStats {
+            total,
+            completed,
+            remaining: total - completed,
+        })
+    }
+
+    pub async fn stats_for_project(&self, project_id: Uuid) -> Result<TodoStats> {
+        let todos = todo::Entity::find()
+            .filter(todo::Column::ProjectId.eq(project_id))
+            .all(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        let total = todos.len() as u64;
+        let completed = todos.iter().filter(|t| t.status == STATUS_DONE).count() as u64;
+
+        Ok(TodoStats {
+            total,
+            completed,
+            remaining: total - completed,
+        })
+    }
+
     fn column_query(
         &self,
         scope: ListScope,
@@ -390,6 +428,13 @@ fn scope_to_date(scope: ListScope) -> Option<NaiveDate> {
         ListScope::Day(date) => Some(date),
         ListScope::Backlog => None,
     }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TodoStats {
+    pub total: u64,
+    pub completed: u64,
+    pub remaining: u64,
 }
 
 #[derive(Debug, Clone, Copy)]

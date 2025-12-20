@@ -2,35 +2,25 @@ use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{ActiveValue::Set, entity::prelude::*};
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
-/// Weekly planner task backing record.
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "todos")]
+#[sea_orm(table_name = "projects")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub title: String,
+    #[sea_orm(unique)]
+    pub name: String,
+    pub workspace_id: Uuid,
     #[sea_orm(default_value = "pending")]
     pub status: String,
-    pub scheduled_for: Option<Date>,
-    #[sea_orm(default_value = 0)]
-    pub order_index: i64,
-    #[sea_orm(default_value = 0)]
-    pub backlog_column: i64,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
-    pub notes: Option<String>,
-    #[sea_orm(column_type = "JsonBinary")]
-    pub metadata: JsonValue,
-    pub workspace_id: Option<Uuid>,
-    pub project_id: Option<Uuid>,
     #[sea_orm(belongs_to, from = "workspace_id", to = "id")]
     pub workspace: HasOne<super::workspace::Entity>,
-    #[sea_orm(belongs_to, from = "project_id", to = "id")]
-    pub project: HasOne<super::project::Entity>,
+    #[sea_orm(has_many)]
+    pub todos: HasMany<super::todo::Entity>,
 }
 
 #[async_trait]
@@ -46,10 +36,6 @@ impl ActiveModelBehavior for ActiveModel {
         }
 
         self.updated_at = Set(now);
-
-        if self.metadata.is_not_set() {
-            self.metadata = Set(JsonValue::Null);
-        }
 
         if self.status.is_not_set() {
             self.status = Set("pending".to_string());
