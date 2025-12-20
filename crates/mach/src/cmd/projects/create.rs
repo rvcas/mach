@@ -26,7 +26,11 @@ impl Args {
             .await?
             .ok_or_else(|| miette::miette!("workspace '{}' not found", self.workspace))?;
 
-        let status = if self.permanent { "permanent" } else { "pending" };
+        let status = if self.permanent {
+            "permanent"
+        } else {
+            "pending"
+        };
 
         let project = services
             .projects

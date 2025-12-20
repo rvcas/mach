@@ -55,9 +55,12 @@ impl Args {
         }
 
         if self.workspace.is_some() || self.project.is_some() {
-            let (workspace_id, project_id) =
-                resolve_workspace_project(services, self.workspace.as_deref(), self.project.as_deref())
-                    .await?;
+            let (workspace_id, project_id) = resolve_workspace_project(
+                services,
+                self.workspace.as_deref(),
+                self.project.as_deref(),
+            )
+            .await?;
             updated = services
                 .todos
                 .update_workspace_project(updated.id, workspace_id, project_id)
