@@ -33,12 +33,14 @@ impl ProjectService {
         name: impl Into<String>,
         workspace_id: Uuid,
         status: impl Into<String>,
+        description: Option<String>,
     ) -> Result<project::Model> {
         let model = project::ActiveModel {
             id: Set(Uuid::new_v4()),
             name: Set(name.into()),
             workspace_id: Set(workspace_id),
             status: Set(status.into()),
+            description: Set(description),
             ..Default::default()
         };
 
@@ -100,6 +102,22 @@ impl ProjectService {
 
         let mut active: project::ActiveModel = model.into();
         active.status = Set(status.into());
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    pub async fn update_description(
+        &self,
+        id: Uuid,
+        description: Option<String>,
+    ) -> Result<project::Model> {
+        let model = project::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("project not found"))?;
+
+        let mut active: project::ActiveModel = model.into();
+        active.description = Set(description);
         active.update(&self.db).await.into_diagnostic()
     }
 }
