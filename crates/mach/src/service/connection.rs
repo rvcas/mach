@@ -42,7 +42,9 @@ pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseCon
 }
 
 fn sqlite_url(path: &str) -> String {
-    format!("sqlite://{path}?mode=rwc")
+    // WAL mode enables concurrent readers to see latest committed changes from other processes.
+    // busy_timeout prevents immediate failure when database is locked by another process.
+    format!("sqlite://{path}?mode=rwc&_journal_mode=WAL&_busy_timeout=5000")
 }
 
 fn path_to_string(path: &Path) -> String {
