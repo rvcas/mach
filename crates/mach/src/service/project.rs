@@ -17,12 +17,14 @@ impl ProjectService {
     }
 
     pub async fn find_by_name_or_id(&self, name_or_id: &str) -> Result<Option<project::Model>> {
+        let mut condition = Condition::any();
+        if let Ok(uuid) = Uuid::parse_str(name_or_id) {
+            condition = condition.add(project::Column::Id.eq(uuid));
+        }
+        condition = condition.add(project::Column::Name.eq(name_or_id));
+
         project::Entity::find()
-            .filter(
-                Condition::any()
-                    .add(project::Column::Id.eq(name_or_id))
-                    .add(project::Column::Name.eq(name_or_id)),
-            )
+            .filter(condition)
             .one(&self.db)
             .await
             .into_diagnostic()
