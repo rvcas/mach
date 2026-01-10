@@ -15,6 +15,8 @@ impl App {
             let opts = ListOptions {
                 scope: ListScope::Day(column.date),
                 include_done: true,
+                workspace_id: None,
+                project_id: None,
             };
 
             let todos = self.runtime.block_on(self.services.todos.list(opts))?;
@@ -37,6 +39,8 @@ impl App {
             .block_on(self.services.todos.list(ListOptions {
                 scope: ListScope::Backlog,
                 include_done: true,
+                workspace_id: None,
+                project_id: None,
             }))?;
 
         let mut columns: [Vec<TodoView>; BACKLOG_COLUMNS] = Default::default();

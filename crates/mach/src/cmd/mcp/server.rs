@@ -52,6 +52,12 @@ pub struct ListTodosParams {
     #[serde(rename = "includeDone")]
     #[schemars(description = "Include completed todos (default: false)")]
     pub include_done: Option<bool>,
+
+    #[schemars(description = "Optional workspace name or UUID to filter by")]
+    pub workspace: Option<String>,
+
+    #[schemars(description = "Optional project name or UUID to filter by")]
+    pub project: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -299,7 +305,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "List todo items")]
+    #[tool(description = "List todo items, optionally filtered by workspace and/or project")]
     async fn mach_list_todos(
         &self,
         Parameters(params): Parameters<ListTodosParams>,
@@ -315,9 +321,45 @@ impl MachMcpServer {
             }
         };
 
+        // Resolve workspace and project independently - no validation needed for listing.
+        // Mismatched filters simply return 0 results.
+        let workspace_id = if let Some(ref ws) = params.workspace {
+            Some(
+                self.services
+                    .workspaces
+                    .find_by_name_or_id(ws)
+                    .await
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?
+                    .ok_or_else(|| {
+                        McpError::invalid_params(format!("Workspace '{}' not found", ws), None)
+                    })?
+                    .id,
+            )
+        } else {
+            None
+        };
+
+        let project_id = if let Some(ref proj) = params.project {
+            Some(
+                self.services
+                    .projects
+                    .find_by_name_or_id(proj)
+                    .await
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?
+                    .ok_or_else(|| {
+                        McpError::invalid_params(format!("Project '{}' not found", proj), None)
+                    })?
+                    .id,
+            )
+        } else {
+            None
+        };
+
         let opts = ListOptions {
             scope,
             include_done: params.include_done.unwrap_or(false),
+            workspace_id,
+            project_id,
         };
 
         let todos = self

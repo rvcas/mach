@@ -22,6 +22,8 @@ pub enum ListScope {
 pub struct ListOptions {
     pub scope: ListScope,
     pub include_done: bool,
+    pub workspace_id: Option<Uuid>,
+    pub project_id: Option<Uuid>,
 }
 
 impl ListOptions {
@@ -29,6 +31,8 @@ impl ListOptions {
         Self {
             scope: ListScope::Day(date),
             include_done: false,
+            workspace_id: None,
+            project_id: None,
         }
     }
 }
@@ -92,6 +96,14 @@ impl TodoService {
 
         if !opts.include_done {
             query = query.filter(todo::Column::Status.ne(STATUS_DONE));
+        }
+
+        if let Some(workspace_id) = opts.workspace_id {
+            query = query.filter(todo::Column::WorkspaceId.eq(workspace_id));
+        }
+
+        if let Some(project_id) = opts.project_id {
+            query = query.filter(todo::Column::ProjectId.eq(project_id));
         }
 
         let done_first = Expr::cust("CASE WHEN status = 'done' THEN 1 ELSE 0 END");
