@@ -16,12 +16,14 @@ impl WorkspaceService {
     }
 
     pub async fn find_by_name_or_id(&self, name_or_id: &str) -> Result<Option<workspace::Model>> {
+        let mut condition = Condition::any();
+        if let Ok(uuid) = Uuid::parse_str(name_or_id) {
+            condition = condition.add(workspace::Column::Id.eq(uuid));
+        }
+        condition = condition.add(workspace::Column::Name.eq(name_or_id));
+
         workspace::Entity::find()
-            .filter(
-                Condition::any()
-                    .add(workspace::Column::Id.eq(name_or_id))
-                    .add(workspace::Column::Name.eq(name_or_id)),
-            )
+            .filter(condition)
             .one(&self.db)
             .await
             .into_diagnostic()

@@ -26,3 +26,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+
+rmcp.workspace = true
+schemars.workspace = true

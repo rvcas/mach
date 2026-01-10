@@ -2,6 +2,7 @@ pub mod add;
 pub mod delete;
 pub mod done;
 pub mod list;
+pub mod mcp;
 pub mod projects;
 pub mod reopen;
 pub mod update;
@@ -30,6 +31,7 @@ pub enum Cmd {
     #[clap(visible_alias = "p")]
     #[command(subcommand)]
     Projects(projects::Cmd),
+    Mcp(mcp::Args),
 }
 
 impl Cmd {
@@ -43,6 +45,7 @@ impl Cmd {
             Cmd::Delete(args) => args.exec(services).await,
             Cmd::Workspaces(cmd) => cmd.exec(services).await,
             Cmd::Projects(cmd) => cmd.exec(services).await,
+            Cmd::Mcp(args) => args.exec(services).await,
         }
     }
 }

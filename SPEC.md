@@ -103,6 +103,7 @@ CLI shares service layer with TUI; never bypasses domain logic
 ### Aliases
 
 All commands have visible aliases shown in help output:
+
 - `add` → `a`, `list` → `l`, `done` → `d`, `reopen` → `r`, `update` → `u`, `delete` → `rm`
 - `workspaces` → `w`, `projects` → `p`
 - Subcommands: `create` → `c`, `list` → `l`, `update` → `u`, `done` → `d`, `reopen` → `r`
@@ -136,6 +137,7 @@ match a title, an error is returned asking the user to use the UUID instead.
 - **Views**:
   - `b`: open fullscreen backlog view.
   - `gs`: open settings modal.
+- **Refresh**: `r` reloads data from the database.
 - **Quit**: `q` or `Esc` exits the application.
 
 ### Backlog View
@@ -153,6 +155,7 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
   - `x`: toggle completion status.
   - `t`: move focused/selected todo to today.
   - `T` (shift): move focused/selected todo to tomorrow.
+- **Refresh**: `r` reloads data from the database.
 - **Return**: `b`, `q`, or `Esc` returns to weekly view.
 
 ### Add Todo Popup
