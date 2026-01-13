@@ -33,3 +33,5 @@ yarn-error.log*
 pnpm-debug.log*
 
 code-search*
+
+.claude/
