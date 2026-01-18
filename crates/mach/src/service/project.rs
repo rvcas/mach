@@ -1,5 +1,5 @@
-use crate::entity::project;
-use miette::{IntoDiagnostic, Result};
+use crate::entity::{project, todo};
+use miette::{IntoDiagnostic, Result, bail};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait,
     QueryFilter, Set,
@@ -121,5 +121,34 @@ impl ProjectService {
         let mut active: project::ActiveModel = model.into();
         active.description = Set(description);
         active.update(&self.db).await.into_diagnostic()
+    }
+
+    pub async fn delete(&self, id: Uuid) -> Result<bool> {
+        let project = project::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("project not found"))?;
+
+        let todo_count = todo::Entity::find()
+            .filter(todo::Column::ProjectId.eq(id))
+            .count(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        if todo_count > 0 {
+            bail!(
+                "cannot delete project '{}': has {} todo(s). Delete or move them first.",
+                project.name,
+                todo_count
+            );
+        }
+
+        let res = project::Entity::delete_by_id(id)
+            .exec(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        Ok(res.rows_affected > 0)
     }
 }

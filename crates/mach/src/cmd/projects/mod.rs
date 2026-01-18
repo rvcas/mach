@@ -1,4 +1,5 @@
 pub mod create;
+pub mod delete;
 pub mod done;
 pub mod list;
 pub mod reopen;
@@ -39,6 +40,9 @@ pub enum Cmd {
     /// Reopen a project (set status to pending)
     #[clap(visible_alias = "r")]
     Reopen(reopen::Args),
+    /// Delete a project
+    #[clap(visible_alias = "rm")]
+    Delete(delete::Args),
 }
 
 impl Cmd {
@@ -49,6 +53,7 @@ impl Cmd {
             Cmd::Update(args) => args.exec(services).await,
             Cmd::Done(args) => args.exec(services).await,
             Cmd::Reopen(args) => args.exec(services).await,
+            Cmd::Delete(args) => args.exec(services).await,
         }
     }
 }
