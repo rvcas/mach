@@ -88,6 +88,7 @@ CLI shares service layer with TUI; never bypasses domain logic
 - `mach workspaces create "name"`: Create a new workspace.
 - `mach workspaces list [-i|--id]`: List all workspaces with project/todo counts.
 - `mach workspaces update <ref> [-n|--name]`: Update a workspace's name.
+- `mach workspaces delete <ref>`: Delete a workspace (fails if it has projects or todos).
 
 ### Project Commands
 
@@ -264,6 +265,6 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
 - Completion keybindings should remain customizable; default is `x` but expose
   it via settings later in case platforms reserve it.
 - TUI does not yet show workspace/project assignments; currently CLI-only.
-- No workspace/project delete commands yet.
+- No project delete command yet.
 
 This SPEC should evolve; update checkpoints as tasks complete or requirements shift.
