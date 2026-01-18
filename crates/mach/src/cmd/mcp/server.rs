@@ -166,6 +166,10 @@ pub struct CreateProjectParams {
 pub struct ListProjectsParams {
     #[schemars(description = "Optional workspace name or UUID to filter by")]
     pub workspace: Option<String>,
+
+    #[serde(rename = "includeDone")]
+    #[schemars(description = "Include done projects (default: false)")]
+    pub include_done: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -703,8 +707,12 @@ impl MachMcpServer {
                 .map_err(|e| McpError::internal_error(e.to_string(), None))?
         };
 
-        let response: Vec<ProjectResponse> =
-            projects.into_iter().map(ProjectResponse::from).collect();
+        let include_done = params.include_done.unwrap_or(false);
+        let response: Vec<ProjectResponse> = projects
+            .into_iter()
+            .filter(|p| include_done || p.status != "done")
+            .map(ProjectResponse::from)
+            .collect();
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&response).unwrap_or_default(),
         )]))
