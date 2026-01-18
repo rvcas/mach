@@ -23,7 +23,9 @@ pub struct MachMcpServer {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct AddTodoParams {
-    #[schemars(description = "The title/description of the todo item")]
+    #[schemars(
+        description = "The title of the todo item. Use prefixes for priority: 'HIGH: <title>', 'LOW: <title>', 'SPEC: <title>' for spec issues."
+    )]
     pub title: String,
 
     #[serde(rename = "scheduledFor")]
@@ -76,7 +78,9 @@ pub struct UpdateTodoParams {
     #[schemars(description = "UUID of the todo to update")]
     pub id: String,
 
-    #[schemars(description = "New title (if provided)")]
+    #[schemars(
+        description = "New title. Use prefixes for priority: 'HIGH: <title>', 'LOW: <title>', 'SPEC: <title>' for spec issues."
+    )]
     pub title: Option<String>,
 
     #[serde(rename = "scheduledFor")]
