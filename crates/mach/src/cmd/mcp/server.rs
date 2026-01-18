@@ -144,6 +144,18 @@ pub struct MoveTodoParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BatchMoveTodosParams {
+    #[schemars(description = "Array of todo UUIDs to move")]
+    pub ids: Vec<String>,
+
+    #[schemars(description = "Target: 'today', 'backlog' (someday), or ISO date (YYYY-MM-DD)")]
+    pub scope: String,
+
+    #[schemars(description = "Where to place in the target column: 'top' (default) or 'bottom'")]
+    pub placement: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CreateWorkspaceParams {
     #[schemars(description = "Name of the workspace")]
     pub name: String,
@@ -687,6 +699,111 @@ impl MachMcpServer {
         let response = TodoResponse::from(todo);
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]))
+    }
+
+    #[tool(
+        description = "Move multiple todos to a different day or backlog (someday). Returns {moved: true, count, requested, ids, failures}."
+    )]
+    async fn mach_batch_move_todos(
+        &self,
+        Parameters(params): Parameters<BatchMoveTodosParams>,
+    ) -> Result<CallToolResult, McpError> {
+        if params.ids.is_empty() {
+            return Err(McpError::invalid_params("ids array cannot be empty", None));
+        }
+
+        const MAX_BATCH_SIZE: usize = 500;
+        if params.ids.len() > MAX_BATCH_SIZE {
+            return Err(McpError::invalid_params(
+                format!(
+                    "Batch size {} exceeds maximum of {}",
+                    params.ids.len(),
+                    MAX_BATCH_SIZE
+                ),
+                None,
+            ));
+        }
+
+        let mut uuids = Vec::with_capacity(params.ids.len());
+        let mut invalid_ids = Vec::new();
+
+        for id_str in &params.ids {
+            match Uuid::parse_str(id_str) {
+                Ok(uuid) => uuids.push(uuid),
+                Err(_) => invalid_ids.push(id_str.clone()),
+            }
+        }
+
+        if !invalid_ids.is_empty() {
+            return Err(McpError::invalid_params(
+                format!("Invalid UUID format for ids: {:?}", invalid_ids),
+                None,
+            ));
+        }
+
+        let scope = match params.scope.as_str() {
+            "today" => ListScope::Day(self.services.today()),
+            "backlog" => ListScope::Backlog,
+            date_str => {
+                let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
+                    McpError::invalid_params("Invalid date format, use YYYY-MM-DD", None)
+                })?;
+                ListScope::Day(date)
+            }
+        };
+
+        let placement = match params.placement.as_deref() {
+            None | Some("top") => MovePlacement::Top,
+            Some("bottom") => MovePlacement::Bottom,
+            Some(_) => {
+                return Err(McpError::invalid_params(
+                    "Placement must be 'top' or 'bottom'",
+                    None,
+                ));
+            }
+        };
+
+        let mut moved_ids = Vec::new();
+        let mut failures: Vec<serde_json::Value> = Vec::new();
+
+        // When placing at top, iterate in reverse so first item in array ends up at actual top.
+        // Each move_to_scope(Top) places the item above existing items, so processing A,B,C
+        // would result in visual order C,B,A. Reversing gives us the intuitive A,B,C order.
+        let ordered_ids: Vec<Uuid> = match placement {
+            MovePlacement::Top => uuids.iter().rev().copied().collect(),
+            MovePlacement::Bottom => uuids.clone(),
+        };
+
+        for id in &ordered_ids {
+            match self
+                .services
+                .todos
+                .move_to_scope(*id, scope, placement)
+                .await
+            {
+                Ok(_) => moved_ids.push(*id),
+                Err(e) => failures.push(serde_json::json!({
+                    "id": id,
+                    "error": e.to_string()
+                })),
+            }
+        }
+
+        // Restore original input order for response (reversed iteration reordered moved_ids)
+        if placement == MovePlacement::Top {
+            moved_ids.reverse();
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::json!({
+                "moved": !moved_ids.is_empty(),
+                "count": moved_ids.len(),
+                "requested": uuids.len(),
+                "ids": moved_ids,
+                "failures": failures
+            })
+            .to_string(),
         )]))
     }
 
