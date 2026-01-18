@@ -18,13 +18,11 @@
 - `cargo clippy` is better than `cargo check`. Feel free to use
   `cargo clippy --fix --allow-dirty`
 
-## Database Stack (SeaORM 2 + Turso)
+## Database Stack (SeaORM 2 + SQLite)
 
-- Use Turso’s embedded builder
-  (`let db = Builder::new_local("mach.db").build().await?;`) for storage, then
-  expose the same file via SeaORM (`Database::connect("sqlite://mach.db?mode=rwc")`
-  or tuned `ConnectOptions` for pool limits, timeouts, and ping checks).
-- SeaORM 2’s `#[sea_orm::model]` macro, `Entity::COLUMN.*` helpers, and richer
+- Use SQLite via SeaORM (`Database::connect("sqlite://mach.db?mode=rwc")` or
+  tuned `ConnectOptions` for pool limits, timeouts, and ping checks).
+- SeaORM 2's `#[sea_orm::model]` macro, `Entity::COLUMN.*` helpers, and richer
   `HasOne/HasMany` wrappers (now distinguish `Unloaded`, `NotFound`, `Loaded`)
   keep queries type-safe; hydrate daily, Someday, and reference buckets via `.with(...)`.
 - Enable the Entity-first workflow (`schema-sync` + `entity-registry`) and call
@@ -60,7 +58,7 @@
 
 - Inline unit tests stay under `#[cfg(test)]`; integration tests live in
   `crates/mach/tests/` (`weekly_board.rs`, `someday_sync.rs`, etc.).
-- Use `tokio::test` with Turso in-memory (`Builder::new_local(":memory:")`) to
+- Use `tokio::test` with SQLite in-memory (`:memory:` connection string) to
   exercise SeaORM queries and verify `schema-sync` idempotence.
 - Assert `HasOne/HasMany` states (Unloaded vs NotFound) and keep >80% coverage
   across reducers, filters, and scheduling logic before requesting review.
