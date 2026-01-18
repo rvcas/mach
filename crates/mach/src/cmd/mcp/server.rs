@@ -106,6 +106,12 @@ pub struct DeleteTodoParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BatchDeleteTodosParams {
+    #[schemars(description = "Array of todo UUIDs to delete")]
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct MarkDoneParams {
     #[schemars(description = "UUID of the todo to mark as done")]
     pub id: String,
@@ -491,6 +497,62 @@ impl MachMcpServer {
 
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::json!({"deleted": true, "id": id}).to_string(),
+        )]))
+    }
+
+    #[tool(description = "Delete multiple todos permanently in a single operation")]
+    async fn mach_batch_delete_todos(
+        &self,
+        Parameters(params): Parameters<BatchDeleteTodosParams>,
+    ) -> Result<CallToolResult, McpError> {
+        if params.ids.is_empty() {
+            return Err(McpError::invalid_params("ids array cannot be empty", None));
+        }
+
+        const MAX_BATCH_SIZE: usize = 500;
+        if params.ids.len() > MAX_BATCH_SIZE {
+            return Err(McpError::invalid_params(
+                format!(
+                    "Batch size {} exceeds maximum of {}",
+                    params.ids.len(),
+                    MAX_BATCH_SIZE
+                ),
+                None,
+            ));
+        }
+
+        let mut uuids = Vec::with_capacity(params.ids.len());
+        let mut invalid_ids = Vec::new();
+
+        for id_str in &params.ids {
+            match Uuid::parse_str(id_str) {
+                Ok(uuid) => uuids.push(uuid),
+                Err(_) => invalid_ids.push(id_str.clone()),
+            }
+        }
+
+        if !invalid_ids.is_empty() {
+            return Err(McpError::invalid_params(
+                format!("Invalid UUID format for ids: {:?}", invalid_ids),
+                None,
+            ));
+        }
+
+        let deleted_count = self
+            .services
+            .todos
+            .delete_many(uuids.clone())
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::json!({
+                "deleted": true,
+                "count": deleted_count,
+                "requested": uuids.len(),
+                "ids": uuids
+            })
+            .to_string(),
         )]))
     }
 

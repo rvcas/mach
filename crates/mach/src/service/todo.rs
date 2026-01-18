@@ -134,6 +134,21 @@ impl TodoService {
         Ok(res.rows_affected > 0)
     }
 
+    /// Delete multiple todos by id.
+    pub async fn delete_many(&self, ids: Vec<Uuid>) -> Result<u64> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+
+        let res = todo::Entity::delete_many()
+            .filter(todo::Column::Id.is_in(ids))
+            .exec(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        Ok(res.rows_affected)
+    }
+
     /// Mark a todo as complete, ensuring backlog items move into today's column.
     pub async fn mark_done(&self, id: Uuid, today: NaiveDate) -> Result<todo::Model> {
         let model = self.load(id).await?;
