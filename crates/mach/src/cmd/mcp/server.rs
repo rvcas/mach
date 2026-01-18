@@ -30,7 +30,7 @@ pub struct AddTodoParams {
 
     #[serde(rename = "scheduledFor")]
     #[schemars(
-        description = "ISO date (YYYY-MM-DD) to schedule the todo. Omitted = today. Use 'backlog' for someday items."
+        description = "ISO date (YYYY-MM-DD) to schedule the todo. Omit for today. Use 'backlog' for someday items (no scheduled date)."
     )]
     pub scheduled_for: Option<String>,
 
@@ -47,7 +47,7 @@ pub struct AddTodoParams {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ListTodosParams {
     #[schemars(
-        description = "Filter scope: 'today' (default), 'backlog', or ISO date (YYYY-MM-DD)"
+        description = "Filter scope: 'today' (default), 'backlog' (someday items with no date), or ISO date (YYYY-MM-DD)"
     )]
     pub scope: Option<String>,
 
@@ -88,12 +88,10 @@ pub struct UpdateTodoParams {
     pub title: Option<String>,
 
     #[serde(rename = "scheduledFor")]
-    #[schemars(
-        description = "New scheduled date (YYYY-MM-DD) or null/'backlog' to move to backlog"
-    )]
+    #[schemars(description = "New date (YYYY-MM-DD), or 'backlog'/'someday' to clear the date")]
     pub scheduled_for: Option<String>,
 
-    #[schemars(description = "New notes (if provided)")]
+    #[schemars(description = "New notes, or empty string to clear")]
     pub notes: Option<String>,
 
     #[schemars(description = "Workspace name or UUID, or empty string to clear")]
@@ -138,7 +136,7 @@ pub struct MoveTodoParams {
     #[schemars(description = "UUID of the todo to move")]
     pub id: String,
 
-    #[schemars(description = "Target: 'today', 'backlog', or ISO date (YYYY-MM-DD)")]
+    #[schemars(description = "Target: 'today', 'backlog' (someday), or ISO date (YYYY-MM-DD)")]
     pub scope: String,
 
     #[schemars(description = "Where to place in the target column: 'top' (default) or 'bottom'")]
@@ -301,7 +299,9 @@ impl MachMcpServer {
         }
     }
 
-    #[tool(description = "Add a new todo item")]
+    #[tool(
+        description = "Add a new todo. Returns the created todo with id, title, status, scheduledFor, notes, workspaceId, projectId."
+    )]
     async fn mach_add_todo(
         &self,
         Parameters(params): Parameters<AddTodoParams>,
@@ -334,7 +334,9 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "List todo items, optionally filtered by workspace and/or project")]
+    #[tool(
+        description = "List todos filtered by scope, workspace, and/or project. Returns array of todos."
+    )]
     async fn mach_list_todos(
         &self,
         Parameters(params): Parameters<ListTodosParams>,
@@ -415,7 +417,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Get a single todo by ID")]
+    #[tool(description = "Get a single todo by ID. Returns the todo or error if not found.")]
     async fn mach_get_todo(
         &self,
         Parameters(params): Parameters<GetTodoParams>,
@@ -436,7 +438,9 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Update a todo's title, date, notes, or workspace/project")]
+    #[tool(
+        description = "Update a todo's title, date, notes, or workspace/project. Returns the updated todo."
+    )]
     async fn mach_update_todo(
         &self,
         Parameters(params): Parameters<UpdateTodoParams>,
@@ -501,7 +505,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Delete a todo permanently")]
+    #[tool(description = "Delete a todo permanently. Returns {deleted: true, id}.")]
     async fn mach_delete_todo(
         &self,
         Parameters(params): Parameters<DeleteTodoParams>,
@@ -520,7 +524,9 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Delete multiple todos permanently in a single operation")]
+    #[tool(
+        description = "Delete multiple todos permanently. Returns {deleted: true, count, requested, ids}."
+    )]
     async fn mach_batch_delete_todos(
         &self,
         Parameters(params): Parameters<BatchDeleteTodosParams>,
@@ -576,7 +582,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Mark a todo as completed")]
+    #[tool(description = "Mark a todo as completed. Returns the updated todo.")]
     async fn mach_mark_done(
         &self,
         Parameters(params): Parameters<MarkDoneParams>,
@@ -597,7 +603,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Revert a completed todo back to pending")]
+    #[tool(description = "Revert a completed todo back to pending. Returns the updated todo.")]
     async fn mach_mark_pending(
         &self,
         Parameters(params): Parameters<MarkPendingParams>,
@@ -618,7 +624,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Mark a todo as in-progress (actively being worked on)")]
+    #[tool(description = "Mark a todo as in-progress. Returns the updated todo.")]
     async fn mach_mark_in_progress(
         &self,
         Parameters(params): Parameters<MarkInProgressParams>,
@@ -639,7 +645,9 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Move a todo to a different day or backlog")]
+    #[tool(
+        description = "Move a todo to a different day or backlog (someday). Returns the updated todo."
+    )]
     async fn mach_move_todo(
         &self,
         Parameters(params): Parameters<MoveTodoParams>,
@@ -682,7 +690,9 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Create a new workspace")]
+    #[tool(
+        description = "Create a new workspace. Returns the created workspace with id, name, timestamps."
+    )]
     async fn mach_create_workspace(
         &self,
         Parameters(params): Parameters<CreateWorkspaceParams>,
@@ -700,7 +710,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "List all workspaces")]
+    #[tool(description = "List all workspaces. Returns array of workspaces.")]
     async fn mach_list_workspaces(
         &self,
         Parameters(_params): Parameters<ListWorkspacesParams>,
@@ -721,7 +731,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Update a workspace's name")]
+    #[tool(description = "Update a workspace's name. Returns the updated workspace.")]
     async fn mach_update_workspace(
         &self,
         Parameters(params): Parameters<UpdateWorkspaceParams>,
@@ -742,7 +752,9 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Create a new project in a workspace")]
+    #[tool(
+        description = "Create a new project in a workspace. Returns the created project with id, name, workspaceId, status, timestamps."
+    )]
     async fn mach_create_project(
         &self,
         Parameters(params): Parameters<CreateProjectParams>,
@@ -781,7 +793,9 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "List projects, optionally filtered by workspace")]
+    #[tool(
+        description = "List projects, optionally filtered by workspace. Returns array of projects."
+    )]
     async fn mach_list_projects(
         &self,
         Parameters(params): Parameters<ListProjectsParams>,
@@ -821,7 +835,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Update a project's name or status")]
+    #[tool(description = "Update a project's name or status. Returns the updated project.")]
     async fn mach_update_project(
         &self,
         Parameters(params): Parameters<UpdateProjectParams>,
@@ -881,7 +895,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Mark a project as done")]
+    #[tool(description = "Mark a project as done. Returns the updated project.")]
     async fn mach_mark_project_done(
         &self,
         Parameters(params): Parameters<MarkProjectDoneParams>,
@@ -902,7 +916,7 @@ impl MachMcpServer {
         )]))
     }
 
-    #[tool(description = "Reopen a project (set status back to pending)")]
+    #[tool(description = "Reopen a project (set status to pending). Returns the updated project.")]
     async fn mach_reopen_project(
         &self,
         Parameters(params): Parameters<ReopenProjectParams>,
