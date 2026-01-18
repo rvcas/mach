@@ -55,6 +55,10 @@ pub struct ListTodosParams {
     #[schemars(description = "Include completed todos (default: false)")]
     pub include_done: Option<bool>,
 
+    #[serde(rename = "includeNotes")]
+    #[schemars(description = "Include notes in response (default: false)")]
+    pub include_notes: Option<bool>,
+
     #[schemars(description = "Optional workspace name or UUID to filter by")]
     pub workspace: Option<String>,
 
@@ -395,7 +399,17 @@ impl MachMcpServer {
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 
-        let response: Vec<TodoResponse> = todos.into_iter().map(TodoResponse::from).collect();
+        let include_notes = params.include_notes.unwrap_or(false);
+        let response: Vec<TodoResponse> = todos
+            .into_iter()
+            .map(|todo| {
+                let mut resp = TodoResponse::from(todo);
+                if !include_notes {
+                    resp.notes = None;
+                }
+                resp
+            })
+            .collect();
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&response).unwrap_or_default(),
         )]))
