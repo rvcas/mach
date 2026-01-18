@@ -58,6 +58,11 @@ pub struct ListTodosParams {
 
     #[schemars(description = "Optional project name or UUID to filter by")]
     pub project: Option<String>,
+
+    #[schemars(
+        description = "Filter by status values: 'pending', 'done', etc. Accepts array of strings."
+    )]
+    pub status: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -360,6 +365,7 @@ impl MachMcpServer {
             include_done: params.include_done.unwrap_or(false),
             workspace_id,
             project_id,
+            status: params.status,
         };
 
         let todos = self
@@ -741,7 +747,11 @@ impl MachMcpServer {
         }
 
         if let Some(ref desc) = params.description {
-            let description = if desc.is_empty() { None } else { Some(desc.clone()) };
+            let description = if desc.is_empty() {
+                None
+            } else {
+                Some(desc.clone())
+            };
             project = self
                 .services
                 .projects

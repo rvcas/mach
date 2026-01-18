@@ -24,6 +24,7 @@ pub struct ListOptions {
     pub include_done: bool,
     pub workspace_id: Option<Uuid>,
     pub project_id: Option<Uuid>,
+    pub status: Option<Vec<String>>,
 }
 
 impl ListOptions {
@@ -33,6 +34,7 @@ impl ListOptions {
             include_done: false,
             workspace_id: None,
             project_id: None,
+            status: None,
         }
     }
 }
@@ -94,7 +96,13 @@ impl TodoService {
     pub async fn list(&self, opts: ListOptions) -> Result<Vec<todo::Model>> {
         let mut query = todo::Entity::find().filter(scope_condition(opts.scope));
 
-        if !opts.include_done {
+        // When status filter is provided (non-empty), it takes precedence over include_done.
+        // Empty array means "no status filter" - falls through to include_done logic.
+        if let Some(ref statuses) = opts.status
+            && !statuses.is_empty()
+        {
+            query = query.filter(todo::Column::Status.is_in(statuses.clone()));
+        } else if !opts.include_done {
             query = query.filter(todo::Column::Status.ne(STATUS_DONE));
         }
 
