@@ -100,6 +100,7 @@ CLI shares service layer with TUI; never bypasses domain logic
   Update a project. Status can be `pending`, `done`, or `permanent`.
 - `mach projects done <ref>`: Mark a project as done.
 - `mach projects reopen <ref>`: Reopen a project (set status to pending).
+- `mach projects delete <ref>`: Delete a project (fails if it has todos).
 
 ### Aliases
 
@@ -107,7 +108,7 @@ All commands have visible aliases shown in help output:
 
 - `add` → `a`, `list` → `l`, `done` → `d`, `reopen` → `r`, `update` → `u`, `delete` → `rm`
 - `workspaces` → `w`, `projects` → `p`
-- Subcommands: `create` → `c`, `list` → `l`, `update` → `u`, `done` → `d`, `reopen` → `r`
+- Subcommands: `create` → `c`, `list` → `l`, `update` → `u`, `done` → `d`, `reopen` → `r`, `delete` → `rm`
 
 ### Reference Resolution
 
@@ -265,6 +266,5 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
 - Completion keybindings should remain customizable; default is `x` but expose
   it via settings later in case platforms reserve it.
 - TUI does not yet show workspace/project assignments; currently CLI-only.
-- No project delete command yet.
 
 This SPEC should evolve; update checkpoints as tasks complete or requirements shift.
