@@ -124,6 +124,12 @@ pub struct MarkPendingParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct MarkInProgressParams {
+    #[schemars(description = "UUID of the todo to mark as in-progress")]
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct MoveTodoParams {
     #[schemars(description = "UUID of the todo to move")]
     pub id: String,
@@ -589,6 +595,27 @@ impl MachMcpServer {
             .services
             .todos
             .mark_pending(id)
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        let response = TodoResponse::from(todo);
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]))
+    }
+
+    #[tool(description = "Mark a todo as in-progress (actively being worked on)")]
+    async fn mach_mark_in_progress(
+        &self,
+        Parameters(params): Parameters<MarkInProgressParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let id = Uuid::parse_str(&params.id)
+            .map_err(|_| McpError::invalid_params("Invalid UUID format", None))?;
+
+        let todo = self
+            .services
+            .todos
+            .mark_in_progress(id)
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
 

@@ -9,6 +9,7 @@ use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 const STATUS_DONE: &str = "done";
+const STATUS_IN_PROGRESS: &str = "in_progress";
 
 /// Scope to fetch/move todos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,6 +185,26 @@ impl TodoService {
         let mut active: todo::ActiveModel = model.into();
         active.status = Set("pending".to_string());
         active.order_index = Set(target_index);
+
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    /// Transition a todo to in-progress state.
+    pub async fn mark_in_progress(&self, id: Uuid) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+
+        if model.status == STATUS_IN_PROGRESS {
+            return Ok(model);
+        }
+
+        let mut active: todo::ActiveModel = model.clone().into();
+        active.status = Set(STATUS_IN_PROGRESS.to_string());
+
+        // Reorder to top if coming from done (has stale order_index at bottom)
+        if model.status == STATUS_DONE {
+            let target_index = self.next_top_order_index(model.scheduled_for).await?;
+            active.order_index = Set(target_index);
+        }
 
         active.update(&self.db).await.into_diagnostic()
     }
