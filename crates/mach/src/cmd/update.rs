@@ -1,5 +1,12 @@
 use crate::service::Services;
 
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum TodoStatus {
+    Pending,
+    InProgress,
+    Done,
+}
+
 /// Update a todo
 #[derive(clap::Args)]
 pub struct Args {
@@ -25,6 +32,10 @@ pub struct Args {
     /// Project name or UUID
     #[clap(short, long)]
     project: Option<String>,
+
+    /// New status (pending, in-progress, done)
+    #[clap(short = 's', long)]
+    status: Option<TodoStatus>,
 }
 
 impl Args {
@@ -34,6 +45,17 @@ impl Args {
             .find_by_title_or_id(&self.reference)
             .await?
             .ok_or_else(|| miette::miette!("todo '{}' not found", self.reference))?;
+
+        if self.title.is_none()
+            && self.day.is_none()
+            && self.notes.is_none()
+            && self.workspace.is_none()
+            && self.project.is_none()
+            && self.status.is_none()
+        {
+            println!("No updates specified");
+            return Ok(());
+        }
 
         let mut updated = todo.clone();
 
@@ -65,6 +87,17 @@ impl Args {
                 .todos
                 .update_workspace_project(updated.id, workspace_id, project_id)
                 .await?;
+        }
+
+        if let Some(status) = self.status {
+            updated = match status {
+                TodoStatus::Pending => services.todos.mark_pending(updated.id).await?,
+                TodoStatus::InProgress => services.todos.mark_in_progress(updated.id).await?,
+                TodoStatus::Done => {
+                    let today = chrono::Local::now().date_naive();
+                    services.todos.mark_done(updated.id, today).await?
+                }
+            };
         }
 
         println!("Updated '{}'", updated.title);

@@ -171,20 +171,22 @@ impl TodoService {
         active.update(&self.db).await.into_diagnostic()
     }
 
-    /// Revert a completed todo back to a pending state.
+    /// Revert a todo back to a pending state.
     pub async fn mark_pending(&self, id: Uuid) -> Result<todo::Model> {
         let model = self.load(id).await?;
 
-        if model.status != STATUS_DONE {
+        if model.status == "pending" {
             return Ok(model);
         }
 
-        let scope = model.scheduled_for;
-        let target_index = self.next_top_order_index(scope).await?;
-
-        let mut active: todo::ActiveModel = model.into();
+        let mut active: todo::ActiveModel = model.clone().into();
         active.status = Set("pending".to_string());
-        active.order_index = Set(target_index);
+
+        // Only recompute order_index when transitioning from done (which has stale index at bottom)
+        if model.status == STATUS_DONE {
+            let target_index = self.next_top_order_index(model.scheduled_for).await?;
+            active.order_index = Set(target_index);
+        }
 
         active.update(&self.db).await.into_diagnostic()
     }
