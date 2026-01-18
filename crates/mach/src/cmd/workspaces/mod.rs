@@ -1,4 +1,5 @@
 pub mod create;
+pub mod delete;
 pub mod list;
 pub mod update;
 
@@ -8,6 +9,9 @@ pub enum Cmd {
     /// Create a new workspace
     #[clap(visible_alias = "c")]
     Create(create::Args),
+    /// Delete a workspace
+    #[clap(visible_alias = "rm")]
+    Delete(delete::Args),
     /// List all workspaces
     #[clap(visible_alias = "l")]
     List(list::Args),
@@ -20,6 +24,7 @@ impl Cmd {
     pub async fn exec(self, services: &crate::service::Services) -> miette::Result<()> {
         match self {
             Cmd::Create(args) => args.exec(services).await,
+            Cmd::Delete(args) => args.exec(services).await,
             Cmd::List(args) => args.exec(services).await,
             Cmd::Update(args) => args.exec(services).await,
         }
