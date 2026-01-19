@@ -174,6 +174,12 @@ pub struct UpdateWorkspaceParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DeleteWorkspaceParams {
+    #[schemars(description = "UUID of the workspace to delete")]
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CreateProjectParams {
     #[schemars(description = "Name of the project")]
     pub name: String,
@@ -872,6 +878,27 @@ impl MachMcpServer {
         let response = WorkspaceResponse::from(workspace);
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]))
+    }
+
+    #[tool(
+        description = "Delete a workspace permanently. Fails if workspace has projects or todos. Returns {deleted: true, id}."
+    )]
+    async fn mach_delete_workspace(
+        &self,
+        Parameters(params): Parameters<DeleteWorkspaceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let id = Uuid::parse_str(&params.id)
+            .map_err(|_| McpError::invalid_params("Invalid UUID format", None))?;
+
+        self.services
+            .workspaces
+            .delete(id)
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::json!({"deleted": true, "id": id}).to_string(),
         )]))
     }
 
