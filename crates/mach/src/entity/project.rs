@@ -15,6 +15,7 @@ pub struct Model {
     pub workspace_id: Uuid,
     #[sea_orm(default_value = "pending")]
     pub status: String,
+    pub description: Option<String>,
     pub created_at: DateTimeUtc,
     pub updated_at: DateTimeUtc,
     #[sea_orm(belongs_to, from = "workspace_id", to = "id")]

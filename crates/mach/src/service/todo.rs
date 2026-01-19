@@ -9,6 +9,7 @@ use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 const STATUS_DONE: &str = "done";
+const STATUS_IN_PROGRESS: &str = "in_progress";
 
 /// Scope to fetch/move todos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +23,9 @@ pub enum ListScope {
 pub struct ListOptions {
     pub scope: ListScope,
     pub include_done: bool,
+    pub workspace_id: Option<Uuid>,
+    pub project_id: Option<Uuid>,
+    pub status: Option<Vec<String>>,
 }
 
 impl ListOptions {
@@ -29,6 +33,9 @@ impl ListOptions {
         Self {
             scope: ListScope::Day(date),
             include_done: false,
+            workspace_id: None,
+            project_id: None,
+            status: None,
         }
     }
 }
@@ -90,8 +97,22 @@ impl TodoService {
     pub async fn list(&self, opts: ListOptions) -> Result<Vec<todo::Model>> {
         let mut query = todo::Entity::find().filter(scope_condition(opts.scope));
 
-        if !opts.include_done {
+        // When status filter is provided (non-empty), it takes precedence over include_done.
+        // Empty array means "no status filter" - falls through to include_done logic.
+        if let Some(ref statuses) = opts.status
+            && !statuses.is_empty()
+        {
+            query = query.filter(todo::Column::Status.is_in(statuses.clone()));
+        } else if !opts.include_done {
             query = query.filter(todo::Column::Status.ne(STATUS_DONE));
+        }
+
+        if let Some(workspace_id) = opts.workspace_id {
+            query = query.filter(todo::Column::WorkspaceId.eq(workspace_id));
+        }
+
+        if let Some(project_id) = opts.project_id {
+            query = query.filter(todo::Column::ProjectId.eq(project_id));
         }
 
         let done_first = Expr::cust("CASE WHEN status = 'done' THEN 1 ELSE 0 END");
@@ -112,6 +133,21 @@ impl TodoService {
             .into_diagnostic()?;
 
         Ok(res.rows_affected > 0)
+    }
+
+    /// Delete multiple todos by id.
+    pub async fn delete_many(&self, ids: Vec<Uuid>) -> Result<u64> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+
+        let res = todo::Entity::delete_many()
+            .filter(todo::Column::Id.is_in(ids))
+            .exec(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        Ok(res.rows_affected)
     }
 
     /// Mark a todo as complete, ensuring backlog items move into today's column.
@@ -135,20 +171,42 @@ impl TodoService {
         active.update(&self.db).await.into_diagnostic()
     }
 
-    /// Revert a completed todo back to a pending state.
+    /// Revert a todo back to a pending state.
     pub async fn mark_pending(&self, id: Uuid) -> Result<todo::Model> {
         let model = self.load(id).await?;
 
-        if model.status != STATUS_DONE {
+        if model.status == "pending" {
             return Ok(model);
         }
 
-        let scope = model.scheduled_for;
-        let target_index = self.next_top_order_index(scope).await?;
-
-        let mut active: todo::ActiveModel = model.into();
+        let mut active: todo::ActiveModel = model.clone().into();
         active.status = Set("pending".to_string());
-        active.order_index = Set(target_index);
+
+        // Only recompute order_index when transitioning from done (which has stale index at bottom)
+        if model.status == STATUS_DONE {
+            let target_index = self.next_top_order_index(model.scheduled_for).await?;
+            active.order_index = Set(target_index);
+        }
+
+        active.update(&self.db).await.into_diagnostic()
+    }
+
+    /// Transition a todo to in-progress state.
+    pub async fn mark_in_progress(&self, id: Uuid) -> Result<todo::Model> {
+        let model = self.load(id).await?;
+
+        if model.status == STATUS_IN_PROGRESS {
+            return Ok(model);
+        }
+
+        let mut active: todo::ActiveModel = model.clone().into();
+        active.status = Set(STATUS_IN_PROGRESS.to_string());
+
+        // Reorder to top if coming from done (has stale order_index at bottom)
+        if model.status == STATUS_DONE {
+            let target_index = self.next_top_order_index(model.scheduled_for).await?;
+            active.order_index = Set(target_index);
+        }
 
         active.update(&self.db).await.into_diagnostic()
     }

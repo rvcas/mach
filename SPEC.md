@@ -88,6 +88,7 @@ CLI shares service layer with TUI; never bypasses domain logic
 - `mach workspaces create "name"`: Create a new workspace.
 - `mach workspaces list [-i|--id]`: List all workspaces with project/todo counts.
 - `mach workspaces update <ref> [-n|--name]`: Update a workspace's name.
+- `mach workspaces delete <ref>`: Delete a workspace (fails if it has projects or todos).
 
 ### Project Commands
 
@@ -99,13 +100,15 @@ CLI shares service layer with TUI; never bypasses domain logic
   Update a project. Status can be `pending`, `done`, or `permanent`.
 - `mach projects done <ref>`: Mark a project as done.
 - `mach projects reopen <ref>`: Reopen a project (set status to pending).
+- `mach projects delete <ref>`: Delete a project (fails if it has todos).
 
 ### Aliases
 
 All commands have visible aliases shown in help output:
+
 - `add` → `a`, `list` → `l`, `done` → `d`, `reopen` → `r`, `update` → `u`, `delete` → `rm`
 - `workspaces` → `w`, `projects` → `p`
-- Subcommands: `create` → `c`, `list` → `l`, `update` → `u`, `done` → `d`, `reopen` → `r`
+- Subcommands: `create` → `c`, `list` → `l`, `update` → `u`, `done` → `d`, `reopen` → `r`, `delete` → `rm`
 
 ### Reference Resolution
 
@@ -136,6 +139,7 @@ match a title, an error is returned asking the user to use the UUID instead.
 - **Views**:
   - `b`: open fullscreen backlog view.
   - `gs`: open settings modal.
+- **Refresh**: `r` reloads data from the database.
 - **Quit**: `q` or `Esc` exits the application.
 
 ### Backlog View
@@ -153,6 +157,7 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
   - `x`: toggle completion status.
   - `t`: move focused/selected todo to today.
   - `T` (shift): move focused/selected todo to tomorrow.
+- **Refresh**: `r` reloads data from the database.
 - **Return**: `b`, `q`, or `Esc` returns to weekly view.
 
 ### Add Todo Popup
@@ -261,6 +266,5 @@ The backlog is a fullscreen view with 4 columns for organizing someday items.
 - Completion keybindings should remain customizable; default is `x` but expose
   it via settings later in case platforms reserve it.
 - TUI does not yet show workspace/project assignments; currently CLI-only.
-- No workspace/project delete commands yet.
 
 This SPEC should evolve; update checkpoints as tasks complete or requirements shift.

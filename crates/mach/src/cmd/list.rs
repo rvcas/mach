@@ -30,6 +30,9 @@ impl Args {
         let opts = ListOptions {
             scope,
             include_done: self.done,
+            workspace_id: None,
+            project_id: None,
+            status: None,
         };
 
         let todos = services.todos.list(opts).await?;

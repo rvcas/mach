@@ -1,7 +1,8 @@
-use crate::entity::workspace;
-use miette::{IntoDiagnostic, Result};
+use crate::entity::{project, todo, workspace};
+use miette::{IntoDiagnostic, Result, bail};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait,
+    QueryFilter, Set,
 };
 use uuid::Uuid;
 
@@ -16,12 +17,14 @@ impl WorkspaceService {
     }
 
     pub async fn find_by_name_or_id(&self, name_or_id: &str) -> Result<Option<workspace::Model>> {
+        let mut condition = Condition::any();
+        if let Ok(uuid) = Uuid::parse_str(name_or_id) {
+            condition = condition.add(workspace::Column::Id.eq(uuid));
+        }
+        condition = condition.add(workspace::Column::Name.eq(name_or_id));
+
         workspace::Entity::find()
-            .filter(
-                Condition::any()
-                    .add(workspace::Column::Id.eq(name_or_id))
-                    .add(workspace::Column::Name.eq(name_or_id)),
-            )
+            .filter(condition)
             .one(&self.db)
             .await
             .into_diagnostic()
@@ -61,5 +64,48 @@ impl WorkspaceService {
         let mut active: workspace::ActiveModel = model.into();
         active.name = Set(name.into());
         active.update(&self.db).await.into_diagnostic()
+    }
+
+    pub async fn delete(&self, id: Uuid) -> Result<bool> {
+        let workspace = workspace::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("workspace not found"))?;
+
+        let project_count = project::Entity::find()
+            .filter(project::Column::WorkspaceId.eq(id))
+            .count(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        if project_count > 0 {
+            bail!(
+                "cannot delete workspace '{}': has {} project(s). Delete them first.",
+                workspace.name,
+                project_count
+            );
+        }
+
+        let todo_count = todo::Entity::find()
+            .filter(todo::Column::WorkspaceId.eq(id))
+            .count(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        if todo_count > 0 {
+            bail!(
+                "cannot delete workspace '{}': has {} todo(s). Delete or move them first.",
+                workspace.name,
+                todo_count
+            );
+        }
+
+        let res = workspace::Entity::delete_by_id(id)
+            .exec(&self.db)
+            .await
+            .into_diagnostic()?;
+
+        Ok(res.rows_affected > 0)
     }
 }

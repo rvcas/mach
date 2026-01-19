@@ -4,7 +4,7 @@ use sea_orm::{ActiveValue::Set, entity::prelude::*};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-/// Key/value configuration persisted inside Turso.
+/// Key/value configuration persisted in SQLite.
 #[sea_orm::model]
 #[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "config_entries")]

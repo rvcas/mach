@@ -34,7 +34,7 @@ impl Args {
 
         let project = services
             .projects
-            .create(&name, workspace.id, status)
+            .create(&name, workspace.id, status, None)
             .await?;
 
         println!(

@@ -22,6 +22,7 @@ The main view showing 7 days of your week.
 | `T`         | Move to tomorrow                                  |
 | `b`         | Open backlog view                                 |
 | `gs`        | Settings (week start day)                         |
+| `r`         | Refresh data                                      |
 | `?`         | Toggle help                                       |
 | `q` / `Esc` | Quit                                              |
 
@@ -40,6 +41,7 @@ Fullscreen 4-column view for organizing "someday" items.
 | `dd`              | Delete                                         |
 | `t`               | Move to today                                  |
 | `T`               | Move to tomorrow                               |
+| `r`               | Refresh data                                   |
 | `?`               | Toggle help                                    |
 | `b` / `q` / `Esc` | Return to weekly view                          |
 

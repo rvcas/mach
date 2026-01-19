@@ -1,11 +1,10 @@
 use std::path::Path;
 
 use miette::{Context, IntoDiagnostic};
-use sea_orm::{Database, DatabaseConnection};
+use sea_orm::{ConnectionTrait, Database, DatabaseConnection};
 use tokio::fs;
 use tokio::fs::OpenOptions;
 
-/// Initialize the local SQLite database file and return a SeaORM connection.
 pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseConnection> {
     let path = path.as_ref();
 
@@ -13,7 +12,6 @@ pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseCon
 
     let path_string = path_to_string(path);
 
-    // Ensure the database file exists so SQLite can open it.
     if !path.exists() {
         OpenOptions::new()
             .create(true)
@@ -25,12 +23,22 @@ pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseCon
             .wrap_err("failed to create sqlite db file")?;
     }
 
-    let url = sqlite_url(&path_string);
+    let url = format!("sqlite://{path_string}?mode=rwc");
 
     let conn = Database::connect(&url)
         .await
         .into_diagnostic()
         .wrap_err("failed to open SeaORM SQLite connection")?;
+
+    conn.execute_unprepared("PRAGMA journal_mode=WAL")
+        .await
+        .into_diagnostic()
+        .wrap_err("failed to set journal_mode")?;
+
+    conn.execute_unprepared("PRAGMA busy_timeout=5000")
+        .await
+        .into_diagnostic()
+        .wrap_err("failed to set busy_timeout")?;
 
     conn.get_schema_registry("machich::entity::*")
         .sync(&conn)
@@ -39,10 +47,6 @@ pub async fn init_database(path: impl AsRef<Path>) -> miette::Result<DatabaseCon
         .wrap_err("failed to synchronize schema via SeaORM entity registry")?;
 
     Ok(conn)
-}
-
-fn sqlite_url(path: &str) -> String {
-    format!("sqlite://{path}?mode=rwc")
 }
 
 fn path_to_string(path: &Path) -> String {
