@@ -225,6 +225,12 @@ pub struct ReopenProjectParams {
     pub id: String,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DeleteProjectParams {
+    #[schemars(description = "UUID of the project to delete")]
+    pub id: String,
+}
+
 #[derive(Debug, Serialize)]
 struct TodoResponse {
     id: Uuid,
@@ -1051,6 +1057,27 @@ impl MachMcpServer {
         let response = ProjectResponse::from(project);
         Ok(CallToolResult::success(vec![Content::text(
             serde_json::to_string_pretty(&response).unwrap_or_default(),
+        )]))
+    }
+
+    #[tool(
+        description = "Delete a project permanently. Fails if project has todos. Returns {deleted: true, id}."
+    )]
+    async fn mach_delete_project(
+        &self,
+        Parameters(params): Parameters<DeleteProjectParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let id = Uuid::parse_str(&params.id)
+            .map_err(|_| McpError::invalid_params("Invalid UUID format", None))?;
+
+        self.services
+            .projects
+            .delete(id)
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        Ok(CallToolResult::success(vec![Content::text(
+            serde_json::json!({"deleted": true, "id": id}).to_string(),
         )]))
     }
 }
